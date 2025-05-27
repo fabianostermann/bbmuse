@@ -1,10 +1,10 @@
 [project]
 name = "bbmuse"
-version = "0.0.1"
+version = "0.0"
 authors = [
   { name="Fabian Ostermann", email="fabian.ostermann@tu-dortmund.de" },
 ]
-description = "The bbmuse project - blackboard system for realtime AI music generation"
+description = "BlackBoard MUSic Engine - A blackboard system for realtime AI music generation"
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
@@ -21,3 +21,6 @@ Issues = "https://github.com/fabianostermann/bbmuse/issues"
 [build-system]
 requires = ["setuptools >= 77.0.3"]
 build-backend = "setuptools.build_meta"
+
+[project.scripts]
+bbmuse = "bbmuse.cli:main"
