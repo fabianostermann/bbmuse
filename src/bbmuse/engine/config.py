@@ -1,7 +1,7 @@
 import logging
 
 from pathlib import Path
-import tomli
+import tomllib
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class Config(dict):
             raise FileExistsError(config_file)
 
         with open(config_file, 'rb') as f:
-           self.update(tomli.load(f))
+           self.update(tomllib.load(f))
         self["project_dir"] = project_dir
         logger.debug("Config loaded from file: %s", self)
         
