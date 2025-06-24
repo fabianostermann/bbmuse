@@ -1,9 +1,15 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 class Blackboard:
 
     def __init__(self, representations=[]):
         self._board = {}
         for r in representations:
             self.register(r)
+
+        logger.info("Blackboard initialized: %s", self._board)
 
     def register(self, representation):
         rep_name = representation.__class__.__name__
