@@ -64,8 +64,9 @@ class Controller:
     def run(self, limit=None):
         cycle_count = 0
         logger.info("Start running..")
-        self.running = True
-        while self.running and cycle_count != limit:
+
+        self._running = True
+        while self._running:
             start_time = time()
             
             try:
@@ -73,12 +74,15 @@ class Controller:
                     logger.debug("Run update on module %s", mod_handler)
                     mod_handler.run_update(self.blackboard)
             except KeyboardInterrupt:
-                logger.info("KeyboardInterrupt detected: preparing halt..")
+                logger.exception("KeyboardInterrupt detected: signal halt..")
                 self.halt()
 
             delta_time = time() - start_time
             cycle_count += 1
+            if cycle_count == limit:
+                self.halt()
+
             logger.info(f"End of cycle {cycle_count}{"/"+str(limit) if limit is not None else ""}, delta={delta_time:.5f}")
 
     def halt(self):
-        self.running = False
+        self._running = False

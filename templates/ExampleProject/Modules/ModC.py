@@ -1,6 +1,6 @@
 REQUIRES = [ "RepA", "RepB" ]
 PROVIDES = []
 
-def update(bb):
+def _update(bb):
     print(bb["RepA"].ValueA)
     print(bb["RepB"].StringB)

@@ -3,7 +3,7 @@ from time import time
 REQUIRES = []
 PROVIDES = [ "Clock" ]
 
-def update(bb):
+def _update(bb):
     theClock = bb["Clock"]
 
     while time() - theClock.now < 1:

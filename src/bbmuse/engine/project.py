@@ -18,6 +18,7 @@ class BbMuseProject():
     def __init__(self, project_dir):
         self.controller = None
         self.config = Config(project_dir)
+
         self.init_handlers()
 
     def init_handlers(self):
@@ -39,24 +40,46 @@ class BbMuseProject():
             reps_handlers.append(handler)
         logger.debug("Init representations: %s", reps_handlers)
 
-        self.module_handlers = mods_handlers
-        self.representation_handlers = reps_handlers
+        self.potential_module_handlers = mods_handlers
+        self.potential_representation_handlers = reps_handlers
+
+        # run build() to fill the following
+        self.module_handlers = []
+        self.representation_handlers = []
 
     def build(self):
         all_provides = []
-        for handler in self.module_handlers:
-            handler.build()
-            all_provides += handler.get_provides()
+        mod_handlers = []
+        for handler in self.potential_module_handlers:
+            try:
+                handler.build()
+                all_provides += handler.get_provides()
+                mod_handlers.append(handler)
+            except Exception:
+                logger.warning("Build failed for module %s. Skip and ignore.", handler)
+
+        assert mod_handlers, "No modules were successfully build."
+        if handler in mod_handlers:
+            assert handler.get_build_status(), f"Build status is False for {handler}"
+
+        self.module_handlers = mod_handlers
         logger.debug("List of all provided representations: %s", all_provides)
 
-        active_rep_handlers = []
-        for handler in self.representation_handlers:
+        rep_handlers = []
+        for handler in self.potential_representation_handlers:
             if handler.get_name() in all_provides:
-                handler.build()
-                active_rep_handlers.append(handler)
+                try:
+                    handler.build()
+                    rep_handlers.append(handler)
+                except Exception:
+                    logger.warning("Build failed for representation %s. Skip and ignore.", handler)
             else:
-                logger.info("%s not found in provided representations. Skip build.", handler.get_name())
-        self.representation_handlers = active_rep_handlers
+                logger.warning("%s not found in provided representations. Skip import.", handler.get_name())
+
+        assert rep_handlers, "No representations were successfully build."
+        if handler in rep_handlers:
+            assert handler.get_build_status(), f"Build status is False for {handler}"
+        self.representation_handlers = rep_handlers
 
         # make blackboard
         blackboard = Blackboard(self.representation_handlers)

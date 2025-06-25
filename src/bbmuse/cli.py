@@ -36,14 +36,17 @@ def main():
 def process_args():
     parser = argparse.ArgumentParser(prog="bbmuse", description="BlackBoard MUSic Engine")
     parser.add_argument("dir", nargs='?', default=".", help="Path to project directory")
-    parser.add_argument("--verbose", action="store_true", help="Show all debug messages")
-    parser.add_argument("--quiet", action="store_true", help="Show only error messages")
+    parser.add_argument("--verbose", action="store_true", help="Show debug messages")
+    parser.add_argument("--quiet", action="store_true", help="Show warning and error messages")
+    parser.add_argument("--silent", action="store_true", help="Show no messages")
     parser.add_argument("--limit", type=int, default=None, help="Run for a limited number of cycles.")
     args = parser.parse_args()
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     if args.quiet:
-        logging.getLogger().setLevel(logging.ERROR)
+        logging.getLogger().setLevel(logging.WARNING)
+    if args.silent:
+        logging.getLogger().setLevel(logging.CRITICAL+1)
 
     return args

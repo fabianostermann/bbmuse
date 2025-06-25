@@ -1,5 +1,5 @@
 REQUIRES = [ "Clock" ]
 PROVIDES = [ "RepA" ]
     
-def update(bb):
+def _update(bb):
     bb["RepA"].ValueA += 2

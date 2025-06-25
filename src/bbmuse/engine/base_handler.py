@@ -15,7 +15,15 @@ class BaseHandler():
         self._file_location = path.absolute()
         self._name = path.stem
 
+        self.reset_build_status()
         logger.debug(f"Init handler for {self.get_name()} located at {self.get_file_location()}")
+
+    def reset_build_status(self):
+        self._build_success = False
+        self._component = None
+
+    def get_build_status(self):
+        return self._build_success
 
     def get_file_location(self):
         return self._file_location
@@ -26,10 +34,10 @@ class BaseHandler():
     def build(self):
         raise NotImplementedError("Do not use base class. Use subclasses.")
 
-    def dynamic_import_from_file(self):
-        """ Perform dynamic import of a python module from a given filepath
+    def dynamic_import_from_file(self, filepath):
         """
-        filepath = self.get_file_location()
+        Perform dynamic import of a python module from a given file location
+        """
         spec = importlib.util.spec_from_file_location(filepath.stem, filepath)
         python_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(python_module)
@@ -39,7 +47,12 @@ class BaseHandler():
         return self._component
     
     def set_component(self, c):
+        """
+        Only call this if the component was successfully build.
+        It sets the build status to True.
+        """
         self._component = c
+        self._build_success = True
 
     def __repr__(self):
         return f"<{self.get_name()}>"
