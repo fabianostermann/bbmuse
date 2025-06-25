@@ -1,12 +1,15 @@
 import logging
+import sys
 
 from pathlib import Path
 import importlib.util
 import inspect
 
-from bbmuse.engine.config import Config, syntax_keywords
+from bbmuse.engine.config import Config
 from bbmuse.engine.blackboard import Blackboard
 from bbmuse.engine.controller import Controller
+from bbmuse.engine.module_handler import ModuleHandler
+from bbmuse.engine.representation_handler import RepresentationHandler
 
 logger = logging.getLogger(__name__)
 
@@ -15,87 +18,53 @@ class BbMuseProject():
     def __init__(self, project_dir):
         self.controller = None
         self.config = Config(project_dir)
+        self.init_handlers()
+
+    def init_handlers(self):
+        # Search for module defintion files
+        mods_handlers = []
+        for path in self.config["project_dir"].joinpath("Modules").glob("*.py"):
+            handler = ModuleHandler(path)
+            mods_handlers.append(handler)
+        mods_handlers
+
+        if not mods_handlers:
+            raise RuntimeError("Did not find any correct module definitions.")
+        logger.debug("Init modules: %s", mods_handlers)
+
+        # Search for representation defintion files
+        reps_handlers = []
+        for path in self.config["project_dir"].joinpath("Representations").glob("*.py"):
+            handler = RepresentationHandler(path)
+            reps_handlers.append(handler)
+        logger.debug("Init representations: %s", reps_handlers)
+
+        self.module_handlers = mods_handlers
+        self.representation_handlers = reps_handlers
 
     def build(self):
-        modules = self.init_modules()
-        representations = self.init_representations(modules)
+        all_provides = []
+        for handler in self.module_handlers:
+            handler.build()
+            all_provides += handler.get_provides()
+        logger.debug("List of all provided representations: %s", all_provides)
+
+        active_rep_handlers = []
+        for handler in self.representation_handlers:
+            if handler.get_name() in all_provides:
+                handler.build()
+                active_rep_handlers.append(handler)
+            else:
+                logger.info("%s not found in provided representations. Skip build.", handler.get_name())
+        self.representation_handlers = active_rep_handlers
 
         # make blackboard
-        blackboard = Blackboard(representations)
+        blackboard = Blackboard(self.representation_handlers)
 
         # build controller
-        self.controller = Controller(modules, blackboard)
+        self.controller = Controller(self.module_handlers, blackboard)
         self.controller.build()
 
-    def init_representations(self, modules):
-        representations = []
-
-        all_provides = [rep for module in modules for rep in module.provides]
-        unused = []
-
-        for path in self.config["project_dir"].joinpath("Representations").glob("*.py"):
-            mod = self.dynamic_import_from_file(path)
-
-            candidates = [
-                obj for name, obj in inspect.getmembers(mod)
-                if inspect.isclass(obj)
-            ]
-
-            if len(candidates) > 1:
-                raise RuntimeError(
-                    f"{path.name}' provides more than one class {[c.__name__ for c in candidates]}. Only one class is allowed per representation file."
-                )
-            elif len(candidates) == 1:
-                # only initialize representations that are used
-                if candidates[0].__name__ in all_provides:
-                    instance = candidates[0]()
-                    representations.append(instance)
-                else:
-                    unused.append(candidates[0])
-
-        logger.info("Instantiated representations: %s", representations)
-        logger.debug("Unused representation (not instantiated): %s", unused)
-        return representations
-
-    def init_modules(self):
-        modules = []
-        for path in self.config["project_dir"].joinpath("Modules").glob("*.py"):
-            mod = self.dynamic_import_from_file(path)
-
-            candidates = [
-                obj for name, obj in inspect.getmembers(mod)
-                if inspect.isclass(obj) and callable(getattr(obj, "update", None))
-            ]
-
-            if len(candidates) > 1:
-                raise RuntimeError(
-                    f"{path.name}' provides more than one class {[c.__name__ for c in candidates]}. Only one class is allowed per module file."
-                )
-            elif len(candidates) == 1:
-                instance = candidates[0]()
-                # check sanity of module syntax
-                for attribute in [ syntax_keywords["REQUIRES"], syntax_keywords["PROVIDES"] ]:
-                    if not hasattr(instance, attribute):
-                        raise RuntimeError(f"Module {instance} has no '{attribute}'.")
-                    if not isinstance(getattr(instance, attribute), list):
-                        raise RuntimeError(f"'{attribute}' in module {instance} is not of type list.")
-                modules.append(instance)
-
-        logger.info("Instantiated modules: %s", modules)
-        return modules
-
-    def dynamic_import_from_file(self, filepath: Path):
-        """ Perform dynamic import of a python module from a given filepath
-        """
-        spec = importlib.util.spec_from_file_location(filepath.stem, filepath)
-        python_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(python_module)
-        return python_module
-
     def run(self, *args, **kwargs):
-        if self.controller is None:
-            logger.info("No controller available. Building it first..")
-            self.build()
-
         self.controller.run(*args, **kwargs)
         

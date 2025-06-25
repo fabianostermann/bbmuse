@@ -1,2 +1,1 @@
-class RepA():
-    ValueA = 5
+ValueA = 5

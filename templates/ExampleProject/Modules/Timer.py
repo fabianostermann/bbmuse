@@ -1,14 +1,13 @@
 from time import time
 
-class Timer():
-    requires = []
-    provides = [ "Clock" ]
+REQUIRES = []
+PROVIDES = [ "Clock" ]
 
-    def update(bb):
-        theClock = bb["Clock"]
+def update(bb):
+    theClock = bb["Clock"]
 
-        while time() - theClock.now < 1:
-            continue
+    while time() - theClock.now < 1:
+        continue
 
-        theClock.delta = time() - theClock.now
-        theClock.now += theClock.delta
+    theClock.delta = time() - theClock.now
+    theClock.now += theClock.delta

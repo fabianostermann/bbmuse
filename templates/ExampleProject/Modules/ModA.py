@@ -1,6 +1,5 @@
-class ModA():
-    requires = [ "Clock" ]
-    provides = [ "RepA" ]
-        
-    def update(bb):
-        bb["RepA"].ValueA += 2
+REQUIRES = [ "Clock" ]
+PROVIDES = [ "RepA" ]
+    
+def update(bb):
+    bb["RepA"].ValueA += 2

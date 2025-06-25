@@ -1,2 +1,1 @@
-class RepUnused():
-    pass
+pass

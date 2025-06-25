@@ -4,20 +4,20 @@ logger = logging.getLogger(__name__)
 
 class Blackboard:
 
-    def __init__(self, representations=[]):
+    def __init__(self, representation_handlers=[]):
         self._board = {}
-        for r in representations:
+        for r in representation_handlers:
             self.register(r)
 
-        logger.info("Blackboard initialized: %s", self._board)
+        logger.info("Blackboard initialized: %s", self._board.keys())
 
-    def register(self, representation):
-        rep_name = representation.__class__.__name__
+    def register(self, rep_handler):
+        rep_name = rep_handler.get_name()
         if rep_name.lower() in [name.lower() for name in self._board.keys()]:
             raise ValueError(f"Duplicate representation name (case ignored): {rep_name}")
 
         # add representation to blackboard
-        self._board[rep_name] = representation
+        self._board[rep_name] = rep_handler.get_component()
 
     #def remove(self, representation):
     #    """ remove representation from board either by name or object """

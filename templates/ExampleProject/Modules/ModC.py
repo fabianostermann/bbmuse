@@ -1,7 +1,6 @@
-class ModC():
-    requires = [ "RepA", "RepB" ]
-    provides = []
-        
-    def update(bb):
-        print(bb["RepA"].ValueA)
-        print(bb["RepB"].StringB)
+REQUIRES = [ "RepA", "RepB" ]
+PROVIDES = []
+
+def update(bb):
+    print(bb["RepA"].ValueA)
+    print(bb["RepB"].StringB)
