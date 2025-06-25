@@ -1,5 +1,6 @@
 from time import time
 
+USES = [ "RepB" ]
 REQUIRES = []
 PROVIDES = [ "Clock" ]
 

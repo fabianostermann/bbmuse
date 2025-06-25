@@ -72,6 +72,10 @@ class Controller:
             try:
                 for mod_handler in self.execution_order:
                     logger.debug("Run update on module %s", mod_handler)
+                    
+                    # TODO a view of the blackboard should be used
+                    # TODO also, sanity check by pickling that read-only (required and used) representations are not altered
+
                     mod_handler.run_update(self.blackboard)
             except KeyboardInterrupt:
                 logger.exception("KeyboardInterrupt detected: signal halt..")

@@ -21,6 +21,11 @@ class ModuleHandler(BaseHandler):
             if not isinstance(getattr(module, attribute), list):
                 raise SyntaxError(f"'{attribute}' in module {module} is not of type list.")
 
+        attribute = "USES"
+        if hasattr(module, attribute) and not isinstance(getattr(module, attribute), list):
+            raise SyntaxError(f"Optional attribute '{attribute}' in module {module} is used but not of type list.")
+
+
         # check for required methods
         update_method = getattr(module, "_update", None)
         if update_method is None:
@@ -28,20 +33,27 @@ class ModuleHandler(BaseHandler):
         if not callable(update_method):
             raise SyntaxError(f"_update() in {self} is not callable.")
 
-        # add module name tag to print function
+        # overwrite default print
         def print_with_name_tag(*args, **kwargs):
             # print only if global log level is INFO or less
             if logger.getEffectiveLevel() <= logging.INFO:
+                # tag output with module name
                 print(f"MODULE {self.get_name()}:", *args, **kwargs)
         module.print = print_with_name_tag
 
-        self.set_component(module)
+        self.set_component(module) # also sets build_status to True
 
     def get_provides(self):
         return self.get_component().PROVIDES
     
     def get_requires(self):
         return self.get_component().REQUIRES
+    
+    def get_uses(self):
+        if hasattr(self.get_component(), "USES"):
+            return self.get_component().USES
+        else:
+            return []
     
     def run_update(self, bb):
         self.get_component()._update(bb)

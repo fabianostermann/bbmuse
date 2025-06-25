@@ -16,4 +16,4 @@ class RepresentationHandler(BaseHandler):
         # TODO check sanity
         # nothing to do for now
 
-        self.set_component(rep)
+        self.set_component(rep) # also sets build_status to True
