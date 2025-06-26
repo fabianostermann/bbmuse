@@ -1,7 +1,7 @@
 from time import time
 
 USES = [ "RepB" ]
-REQUIRES = []
+REQUIRES = [ "RepA" ]
 PROVIDES = [ "Clock" ]
 
 def _update(bb):

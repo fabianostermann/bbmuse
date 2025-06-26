@@ -15,16 +15,9 @@ class ModuleHandler(BaseHandler):
         module = self.dynamic_import_from_file(self.get_file_location())
 
         # check for required attributes
-        for attribute in [ "REQUIRES", "PROVIDES" ]:
-            if not hasattr(module, attribute):
-                raise SyntaxError(f"Module {module} has no '{attribute}'.")
-            if not isinstance(getattr(module, attribute), list):
-                raise SyntaxError(f"'{attribute}' in module {module} is not of type list.")
-
-        attribute = "USES"
-        if hasattr(module, attribute) and not isinstance(getattr(module, attribute), list):
-            raise SyntaxError(f"Optional attribute '{attribute}' in module {module} is used but not of type list.")
-
+        assert isinstance(getattr(module, "PROVIDES", []), list)
+        assert isinstance(getattr(module, "REQUIRES", []), list)
+        assert isinstance(getattr(module, "USES", []), list)
 
         # check for required methods
         update_method = getattr(module, "_update", None)
@@ -43,15 +36,15 @@ class ModuleHandler(BaseHandler):
 
         self.set_component(module) # also sets build_status to True
     
-    def __str__(self):
-        return f"<Module:{self.get_name()}>"
+    #def __str__(self):
+    #    return f"<Module:{self.get_name()}>"
 
     """ Mandatory attributes """
     def get_provides(self):
-        return self.get_component().PROVIDES
+        return getattr(self.get_component(), "PROVIDES", [])
     
     def get_requires(self):
-        return self.get_component().REQUIRES
+        return getattr(self.get_component(), "REQUIRES", [])
     
     def run_update(self, bb):
         self.get_component()._update(bb)

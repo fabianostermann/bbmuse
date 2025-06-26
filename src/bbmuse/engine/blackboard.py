@@ -12,7 +12,7 @@ class Blackboard:
         for rep in representation_handlers:
             self.register(rep)
 
-        logger.info("Blackboard initialized: %s", self._board.keys())
+        logger.debug("Blackboard initialized: %s", self.list_content())
 
     def register(self, rep_handler: RepresentationHandler):
         rep_name = rep_handler.get_name()
@@ -28,6 +28,9 @@ class Blackboard:
     #        if key == representation or value == representation:
     #            del self._board[key]
     #            break
+
+    def list_content(self):
+        return list(self._board.keys())
 
     def get(self, key):
         return self._board[key]
@@ -51,7 +54,7 @@ class _BlackboardView:
 
     def __getitem__(self, key):
         if key not in self._readable and key not in self._writable:
-            raise KeyError(f"Obtaining representation '{key}' is not allowed.")
+            raise KeyError(f"Obtaining representation '{key}' is not allowed. No use, require or provide was specified by module definition.")
         return self._board.get(key)
 
 

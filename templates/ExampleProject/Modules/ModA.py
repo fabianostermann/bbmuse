@@ -1,4 +1,4 @@
-REQUIRES = [ "Clock" ]
+USES = [ "Clock" ]
 PROVIDES = [ "RepA" ]
 
 internal_var = 0

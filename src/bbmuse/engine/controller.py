@@ -73,6 +73,8 @@ class Controller:
 
     def run(self, quit_after=None):
         cycle_count = 0
+        logger.info(f"Execution order: %s", self.execution_order)
+        logger.info(f"Blackboard contents: %s", self.blackboard.list_content())
         logger.info("Start running..")
 
         self._running = True

@@ -61,7 +61,7 @@ class BaseHandler():
             self._build_success = True
 
     def __repr__(self):
-        return f"<{self.__str__()}>"
+        return self.__str__()
     
     def __str__(self):
         return f"<{self.get_name()}>"
