@@ -19,9 +19,12 @@ class BbMuseProject():
         self.controller = None
         self.config = Config(project_dir)
 
-        self.init_handlers()
-
-    def init_handlers(self):
+    def build_all(self):
+        self.prepare_handlers()
+        self.build_handlers()
+        self.build_controller()
+    
+    def prepare_handlers(self):
         # Search for module defintion files
         mods_handlers = []
         for path in self.config["project_dir"].joinpath("Modules").glob("*.py"):
@@ -30,7 +33,7 @@ class BbMuseProject():
         mods_handlers
 
         if not mods_handlers:
-            raise RuntimeError("Did not find any correct module definitions.")
+            raise RuntimeError("Did not find any module definitions.")
         logger.debug("Init modules: %s", mods_handlers)
 
         # Search for representation defintion files
@@ -47,7 +50,7 @@ class BbMuseProject():
         self.module_handlers = []
         self.representation_handlers = []
 
-    def build(self):
+    def build_handlers(self):
         all_provides = []
         mod_handlers = []
         for handler in self.potential_module_handlers:
@@ -56,7 +59,7 @@ class BbMuseProject():
                 all_provides += handler.get_provides()
                 mod_handlers.append(handler)
             except Exception:
-                logger.warning("Build failed for module %s. Skip and ignore.", handler)
+                logger.exception("Build failed for module %s. Skip and ignore.", handler)
 
         assert mod_handlers, "No modules were successfully build."
         if handler in mod_handlers:
@@ -81,7 +84,8 @@ class BbMuseProject():
             assert handler.get_build_status(), f"Build status is False for {handler}"
         self.representation_handlers = rep_handlers
 
-        # make blackboard
+    def build_controller(self):
+        # create blackboard
         blackboard = Blackboard(self.representation_handlers)
 
         # build controller

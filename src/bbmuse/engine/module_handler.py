@@ -42,18 +42,21 @@ class ModuleHandler(BaseHandler):
         module.print = print_with_name_tag
 
         self.set_component(module) # also sets build_status to True
+    
+    def __str__(self):
+        return f"<Module:{self.get_name()}>"
 
+    """ Mandatory attributes """
     def get_provides(self):
         return self.get_component().PROVIDES
     
     def get_requires(self):
         return self.get_component().REQUIRES
     
-    def get_uses(self):
-        if hasattr(self.get_component(), "USES"):
-            return self.get_component().USES
-        else:
-            return []
-    
     def run_update(self, bb):
         self.get_component()._update(bb)
+
+    """ Optional attributes"""
+    def get_uses(self):
+        return getattr(self.get_component(), "USES", [])
+    

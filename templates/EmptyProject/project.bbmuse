@@ -1,0 +1,6 @@
+# bbmuse configuration file.
+# TOML Syntax
+
+[application]
+name = "Empty Project"
+icon = "icon.png"
