@@ -69,16 +69,16 @@ class BaseHandler():
 class _ReadOnlyObject:
 
     def __init__(self, module):
-        self._module = module
+        object.__setattr__(self, "_module", module)
+        object.__setattr__(self, "_allowed", set(dir(module)))
 
     def __getattr__(self, name):
         return getattr(self._module, name)
 
     def __setattr__(self, name, value):
-        if name == "_module":
-            super().__setattr__(name, value)
-        else:
+        if name not in self._allowed:
             raise AttributeError(f"Creating new attribute '{name}' on <{self._module.__name__}> is not allowed.")
+        super().__setattr__(name, value)
 
     def __delattr__(self, name):
         raise AttributeError(f"Deleting attribute '{name}' from {self._module.__name__} is not allowed.")
