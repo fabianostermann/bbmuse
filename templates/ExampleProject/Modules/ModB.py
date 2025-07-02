@@ -1,5 +1,5 @@
 REQUIRES = [ "Clock" ]
 PROVIDES = [ "RepB" ]
     
-def _update(bb):
-    bb["RepB"].StringB += "!"
+def _update():
+    RepB.StringB += "!"

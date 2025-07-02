@@ -4,11 +4,10 @@ USES = [ "RepB" ]
 REQUIRES = [ "RepA" ]
 PROVIDES = [ "Clock" ]
 
-def _update(bb):
-    theClock = bb["Clock"]
+def _update():
 
-    while time() - theClock.now < 1:
+    while time() - Clock.now < 1:
         continue
 
-    theClock.delta = time() - theClock.now
-    theClock.now += theClock.delta
+    Clock.delta = time() - Clock.now
+    Clock.now += Clock.delta

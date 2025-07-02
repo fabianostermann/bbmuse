@@ -2,7 +2,6 @@ import logging
 
 from pathlib import Path
 import importlib.util
-import inspect
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ class BaseHandler():
         self._name = path.stem
 
         self.reset_build_status()
-        logger.debug(f"Init handler for {self.get_name()} located at {self.get_file_location()}")
+        logger.debug("Init handler for %s located at %s", self.get_name(), self.get_file_location())
 
     def reset_build_status(self):
         self._build_success = False
@@ -50,10 +49,10 @@ class BaseHandler():
         else:
             return self._component_readonly
     
-    def set_component(self, c):
+    def _set_component(self, c):
         """
         Only call this if the component was successfully build.
-        It sets the build status to True.
+        It creates a read-only version and sets the build status to True.
         """
         if not c is None:
             self._component = c
@@ -70,14 +69,14 @@ class _ReadOnlyObject:
 
     def __init__(self, module):
         object.__setattr__(self, "_module", module)
-        object.__setattr__(self, "_allowed", set(dir(module)))
+        object.__setattr__(self, "_allowed", []) #set(dir(module)))
 
     def __getattr__(self, name):
         return getattr(self._module, name)
 
     def __setattr__(self, name, value):
         if name not in self._allowed:
-            raise AttributeError(f"Creating new attribute '{name}' on <{self._module.__name__}> is not allowed.")
+            raise AttributeError(f"Setting attribute '{name}' on <{self._module.__name__}> is not allowed.")
         super().__setattr__(name, value)
 
     def __delattr__(self, name):
