@@ -1,8 +1,6 @@
 import logging
 import sys
 
-from enum import Enum
-
 import argparse
 from bbmuse.engine.project import BbMuseProject
 
@@ -12,12 +10,12 @@ logger = logging.getLogger(__name__)
 def main():
     args = process_args()
 
-    if args.gui:
-        main_gui(args)
+    if args.editor:
+        start_editor(args)
     else:
-        main_headless(args)    
+        start_headless(args)    
 
-def main_headless(args):
+def start_headless(args):
 
     logger.info("Init project..")
     try:
@@ -42,16 +40,16 @@ def main_headless(args):
     
     logger.info("bbmuse exits normally.")
 
-def main_gui(args):
+def start_editor(args):
     try:
-        import bbmuse.gui
+        import bbmuse.editor
     except Exception:
-        logger.error("GUI mode is not implemented yet.")
+        logger.error("GUI is not implemented yet.")
 
 def process_args():
     parser = argparse.ArgumentParser(prog="bbmuse", description="BlackBoard MUSic Engine")
     parser.add_argument("dir", nargs='?', default=None, type=str, help="Path to desired working directory. If none is given, editor opens.")
-    parser.add_argument("-e", "--gui", action="store_true", help="Start the editor instead of running the project.")
+    parser.add_argument("-e", "--editor", action="store_true", help="Start the editor instead of running the project.")
     #parser.add_argument("-p", "--project-manager", action="store_true", help="Start the Project Manager, even if a project is auto-detected.")
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Show debug messages.")
@@ -63,7 +61,7 @@ def process_args():
 
     # if no directory is provided, enable gui mode
     if args.dir is None:
-        args.gui = True
+        args.editor = True
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)

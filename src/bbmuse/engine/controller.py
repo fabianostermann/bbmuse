@@ -71,7 +71,8 @@ class Controller:
 
         self.blackboard_views = bb_views
 
-    def run(self, quit_after=None):
+    def run(self, quit_after=0):
+
         cycle_count = 0
         logger.info(f"Execution order: %s", self.execution_order)
         logger.info(f"Blackboard contents: %s", self.blackboard.list_content())
@@ -99,7 +100,7 @@ class Controller:
             if cycle_count == quit_after:
                 self.halt()
 
-            logger.info(f"End of cycle {cycle_count}{"/"+str(quit_after) if quit_after is not None else ""}, delta={delta_time:.5f}")
+            logger.info(f"End of cycle {cycle_count}{"/"+str(quit_after) if quit_after > 0 else ""}, delta={delta_time:.5f}")
 
     def halt(self):
         self._running = False
