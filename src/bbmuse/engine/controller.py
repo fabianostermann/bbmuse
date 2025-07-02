@@ -3,21 +3,27 @@ import logging
 from collections import defaultdict, deque
 from time import time
 
+from bbmuse.engine.blackboard import Blackboard
+
 logger = logging.getLogger(__name__)
 
 class Controller:
 
-    def __init__(self, module_handlers):
+    def __init__(self, module_handlers, blackboard: Blackboard):
         self.module_handlers = module_handlers
+        self.blackboard = blackboard
 
     def build(self):
         self.build_execution_order()
+        self.build_blackboard_views()
 
     def build_execution_order(self):
         # construct mapping: repr -> provider
         provides_map = {}
         for handler in self.module_handlers:
             for repr in handler.get_provides():
+                if not repr in self.blackboard._board.keys():
+                    raise RuntimeError(f"Representation {repr} is unknown to the blackboard, thus cannot be provided by module {handler}.")
                 if not repr in provides_map.keys():
                     provides_map[repr] = handler
                 else:
@@ -58,10 +64,18 @@ class Controller:
 
         self.execution_order, self.dependencies = exec_order, graph
 
+    def build_blackboard_views(self):
+        bb_views = {}
+        for handler in self.module_handlers:
+            bb_views[handler] = self.blackboard.create_view(handler)
+
+        self.blackboard_views = bb_views
+
     def run(self, quit_after=0):
 
         cycle_count = 0
         logger.info(f"Execution order: %s", self.execution_order)
+        logger.info(f"Blackboard contents: %s", self.blackboard.list_content())
         logger.info("Start running..")
 
         self._running = True
@@ -74,7 +88,7 @@ class Controller:
                     
                     # TODO also, sanity check by pickling that read-only (required and used) representations are not altered
                     try:
-                        mod_handler.run_update()
+                        mod_handler.run_update(self.blackboard_views[mod_handler])
                     except Exception:
                         logger.exception(f"Module {mod_handler} produced an error.")
             except KeyboardInterrupt:

@@ -1,11 +1,9 @@
 REQUIRES = [ "RepA", "RepB" ]
 PROVIDES = []
 
-def _update():
-    print("RepA.ValueA contains:", RepA.ValueA)
-    print("RepB.StringB contains:", RepB.StringB)
+def _update(bb):
+    print("RepA.ValueA contains:", bb["RepA"].ValueA)
+    print("RepB.StringB contains:", bb["RepB"].StringB)
 
-    #RepA.ValueNew = "This is new (and forbidden..)"
-    #print(RepA.ValueNew)
-
-    print("REQUIRES:", REQUIRES)
+    #bb["RepA"].ValueNew = "This is new (and forbidden..)"
+    #print(bb["RepA"].ValueNew)

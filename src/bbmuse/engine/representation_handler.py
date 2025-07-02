@@ -12,8 +12,7 @@ class RepresentationHandler(BaseHandler):
 
     def build(self):
         rep = self.dynamic_import_from_file(self.get_file_location())
-        self._set_component(rep) # also sets build_status to True
+        self.set_component(rep) # also sets build_status to True
 
     #def __str__(self):
     #    return f"<Repr:{self.get_name()}>"
-    

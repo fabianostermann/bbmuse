@@ -6,6 +6,7 @@ import importlib.util
 import inspect
 
 from bbmuse.engine.config import Config
+from bbmuse.engine.blackboard import Blackboard
 from bbmuse.engine.controller import Controller
 from bbmuse.engine.module_handler import ModuleHandler
 from bbmuse.engine.representation_handler import RepresentationHandler
@@ -61,9 +62,10 @@ class BbMuseProject():
                 logger.exception("Build failed for module %s. Skip and ignore.", handler)
 
         assert mod_handlers, "No modules were successfully build."
-        for handler in mod_handlers:
+        if handler in mod_handlers:
             assert handler.get_build_status(), f"Build status is False for {handler}"
 
+        self.module_handlers = mod_handlers
         logger.debug("List of all provided representations: %s", all_provides)
 
         rep_handlers = []
@@ -78,33 +80,16 @@ class BbMuseProject():
                 logger.warning("%s not found in provided representations. Skip import.", handler.get_name())
 
         assert rep_handlers, "No representations were successfully build."
-        for handler in rep_handlers:
+        if handler in rep_handlers:
             assert handler.get_build_status(), f"Build status is False for {handler}"
-        # TODO add sanity check here for duplicate representation names (case ignored)
-
-        for mod_handler in mod_handlers:
-            requested_bindings = set(mod_handler.get_provides()
-                                    + mod_handler.get_requires()
-                                    + mod_handler.get_uses())
-            for rep_handler in rep_handlers:
-                rep_name = rep_handler.get_name()
-                if rep_name in requested_bindings:
-                    mod_handler.bind_representation(
-                        rep_handler.get_name(),
-                        rep_handler.get_component(
-                            read_only=rep_name not in mod_handler.get_provides())
-                    )
-                    requested_bindings.remove(rep_name)
-            if requested_bindings:
-                raise RuntimeError(f"Representations {requested_bindings} are unknown to the blackboard, thus cannot be provided by module {handler}.")
-
-        self.module_handlers = mod_handlers
         self.representation_handlers = rep_handlers
 
-
     def build_controller(self):
+        # create blackboard
+        blackboard = Blackboard(self.representation_handlers)
+
         # build controller
-        self.controller = Controller(self.module_handlers)
+        self.controller = Controller(self.module_handlers, blackboard)
         self.controller.build()
 
     def run(self, *args, **kwargs):
