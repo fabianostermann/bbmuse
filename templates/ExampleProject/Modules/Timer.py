@@ -5,10 +5,9 @@ REQUIRES = [ "RepA" ]
 PROVIDES = [ "Clock" ]
 
 def _update(bb):
-    theClock = bb["Clock"]
-
-    while time() - theClock.now < 1:
+    now = bb.Clock.now
+    while time() - now < 1:
         continue
 
-    theClock.delta = time() - theClock.now
-    theClock.now += theClock.delta
+    bb.Clock.delta = time() - bb.Clock.now
+    bb.Clock.now += bb.Clock.delta
