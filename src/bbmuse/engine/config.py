@@ -12,6 +12,7 @@ class Config(dict):
             {
                 "application": {
                     "name": "Untitled",
+                    "description": "No description available.",
                     "icon": "icon.png"
                 },
                 "path": {

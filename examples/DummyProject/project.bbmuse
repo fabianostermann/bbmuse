@@ -2,7 +2,8 @@
 # TOML Syntax
 
 [application]
-name = "Example Project"
+name = "Dummy Project"
+description = "Used for debugging the code base of bbmuse"
 
 [path]
 modules = ["modules/"]
