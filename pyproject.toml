@@ -1,6 +1,6 @@
 [project]
 name = "bbmuse"
-version = "0.0"
+version = "0.1.dev0"
 authors = [
   { name="Fabian Ostermann", email="fabian.ostermann@tu-dortmund.de" },
 ]
