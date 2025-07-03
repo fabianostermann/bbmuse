@@ -3,4 +3,6 @@
 
 [application]
 name = "Example Project"
-icon = "icon.png"
+
+[path]
+modules = ["modules/"]
