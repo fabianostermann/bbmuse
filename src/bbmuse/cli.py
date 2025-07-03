@@ -16,6 +16,7 @@ def main():
         start_headless(args)    
 
 def start_headless(args):
+    logger.info("Starting headless mode.")
 
     logger.info("Init project..")
     try:
@@ -31,16 +32,20 @@ def start_headless(args):
         logger.exception("Building project failed.")
         sys.exit(1)
 
-    logger.info("Run project..")
-    try:
-        project.run(quit_after=args.quit_after)
-    except Exception:
-        logger.exception("Failure while running project.")
-        sys.exit(1)
+    if args.verify_build:
+        logger.info("Build ended without errors.")
+    else:
+        logger.info("Run project..")
+        try:
+            project.run(quit_after=args.quit_after)
+        except Exception:
+            logger.exception("Failure while running project.")
+            sys.exit(1)
     
-    logger.info("bbmuse exits normally.")
+    logger.info("bbmuse exited normally from headless mode.")
 
 def start_editor(args):
+    logger.info("Starting editor..")
     try:
         import bbmuse.editor
     except Exception:
@@ -56,6 +61,7 @@ def process_args():
     parser.add_argument("-q", "--quiet", action="store_true", help="Show warning and error messages. Overwrites --verbose.")
     parser.add_argument("--silent", action="store_true", help="Show no messages. Overwrites --quiet and --verbose")
 
+    parser.add_argument("--verify-build", action="store_true", help="Verify if project can be build without errors. Will not run afterwards.")
     parser.add_argument("--quit-after", type=int, default=0, help="Quit after the given number of iterations. Set to 0 to disable.")
     args = parser.parse_args()
 

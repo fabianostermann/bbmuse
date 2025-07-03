@@ -5,6 +5,8 @@ from pathlib import Path
 import importlib.util
 import inspect
 
+from collections import Counter
+
 from bbmuse.engine.config import Config
 from bbmuse.engine.blackboard import Blackboard
 from bbmuse.engine.controller import Controller
@@ -27,20 +29,27 @@ class BbMuseProject():
     def prepare_handlers(self):
         # Search for module defintion files
         mods_handlers = []
-        for path in self.config["project_dir"].joinpath("Modules").glob("*.py"):
-            handler = ModuleHandler(path)
-            mods_handlers.append(handler)
-        mods_handlers
-
+        for location in self.config["path"]["modules"]:
+            logger.debug("Searching for module files in location: %s", location)
+            for path in self.config.get_project_dir().joinpath(location).rglob("*.py"):
+                handler = ModuleHandler(path)
+                if handler.get_name().lower() in [mh.get_name().lower() for mh in mods_handlers]:
+                    raise ValueError(f"Duplicate module name (case ignored): {handler.get_name()}")
+                mods_handlers.append(handler)
+        
         if not mods_handlers:
             raise RuntimeError("Did not find any module definitions.")
         logger.debug("Init modules: %s", mods_handlers)
 
         # Search for representation defintion files
         reps_handlers = []
-        for path in self.config["project_dir"].joinpath("Representations").glob("*.py"):
-            handler = RepresentationHandler(path)
-            reps_handlers.append(handler)
+        for location in self.config["path"]["representations"]:
+            logger.debug("Searching for representation files in location: %s", location)
+            for path in self.config.get_project_dir().joinpath(location).rglob("*.py"):
+                handler = RepresentationHandler(path)
+                if handler.get_name().lower() in [mh.get_name().lower() for mh in reps_handlers]:
+                    raise ValueError(f"Duplicate representation name (case ignored): {handler.get_name()}")
+                reps_handlers.append(handler)
         logger.debug("Init representations: %s", reps_handlers)
 
         self.potential_module_handlers = mods_handlers
