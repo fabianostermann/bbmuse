@@ -5,6 +5,8 @@ def _update(bb):
     print("RepA.ValueA contains:", bb.RepA.ValueA)
     print("RepB.StringB contains:", bb.RepB.StringB)
 
+    print("RepA.square_me(RepA.ValueA):", bb.RepA.square_me(bb.RepA.ValueA))
+
     bb.RepA.AList.append(99)
     print("This is a problem. RepA.AList was altered:", bb.RepA.AList)
 
