@@ -90,6 +90,7 @@ class Controller:
                     try:
                         mod_handler.run_update(self.blackboard_views[mod_handler])
                     except Exception:
+                        # TODO: Future improv: Break only in dev mode, ignore in release mode.
                         logger.exception(f"Module {mod_handler} produced an error.")
             except KeyboardInterrupt:
                 logger.exception("KeyboardInterrupt detected: signal halt..")
