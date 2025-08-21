@@ -38,6 +38,7 @@ class Controller:
             for req in handler.get_requires():
                 provider = provides_map.get(req, None)
                 if provider is None:
+                    # TODO: Make this a warning and skip import only for unused representations. The idea: Having bib repr is a smart concept.
                     raise RuntimeError(f"No module provides required representation: {req}")
                 else:
                     if not handler in graph[provider]:

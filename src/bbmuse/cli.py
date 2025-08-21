@@ -3,6 +3,7 @@ import sys
 
 import argparse
 from bbmuse.engine.project import BbMuseProject
+from bbmuse.util.visualization import plot_dependency_graph
 
 logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ def main():
         start_headless(args)    
 
 def start_headless(args):
-    logger.info("Starting headless mode.")
+    logger.info("Starting in headless mode.")
 
     logger.info("Init project..")
     try:
@@ -34,6 +35,7 @@ def start_headless(args):
 
     if args.verify_build:
         logger.info("Build ended without errors.")
+        plot_dependency_graph(project)
     else:
         logger.info("Run project..")
         try:
@@ -45,7 +47,7 @@ def start_headless(args):
     logger.info("bbmuse exited normally from headless mode.")
 
 def start_editor(args):
-    logger.info("Starting editor..")
+    logger.info("Starting gui editor..")
     try:
         import bbmuse.editor
     except Exception:
