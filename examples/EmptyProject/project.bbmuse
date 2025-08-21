@@ -3,3 +3,4 @@
 
 [application]
 name = "Empty Project"
+description = "Has no modules or representations and does nothing."

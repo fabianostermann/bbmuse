@@ -1,3 +1,4 @@
+REQUIRES = [ "BibRep" ]
 PROVIDES = [ "RepOut1", "RepOut2", ]    
 
 def _update(bb):
