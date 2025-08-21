@@ -21,8 +21,6 @@ def plot_dependency_graph(project, filename="graph.png", include_uses=True):
         logger.exception("Plotting of dependency graph failed. Matplotlib or networkx package is missing.")
         return
 
-    filename = project.config.get_project_dir().joinpath(filename)
-
     # --- Helpers to build stable ids and readable labels ---
     def mod_id(handler):
         name = handler.get_name() if hasattr(handler, "get_name") else str(handler)
@@ -183,7 +181,13 @@ def plot_dependency_graph(project, filename="graph.png", include_uses=True):
 
     plt.title(project.config["application"]["name"])
     plt.tight_layout()
-    plt.savefig(filename, bbox_inches="tight", dpi=300)
+    
+    if filename is None:
+        plt.show()
+    else:
+        filename = project.config.get_project_dir().joinpath(filename)
+        plt.savefig(filename, bbox_inches="tight", dpi=300)
+        logger.info("Dependency graph saved to %s", filename)
+
     plt.close()
 
-    logger.info("Dependency graph saved to %s", filename)

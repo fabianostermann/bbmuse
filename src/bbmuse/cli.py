@@ -63,7 +63,7 @@ def process_args():
     parser.add_argument("-q", "--quiet", action="store_true", help="Show warning and error messages. Overwrites --verbose.")
     parser.add_argument("--silent", action="store_true", help="Show no messages. Overwrites --quiet and --verbose")
 
-    parser.add_argument("--verify-build", action="store_true", help="Verify if project can be build without errors. Will not run afterwards.")
+    parser.add_argument("--verify-build", action="store_true", help="Verify if project can be build without errors and creates a plot of the dependency graph. Will not run afterwards.")
     parser.add_argument("--quit-after", type=int, default=0, help="Quit after the given number of iterations. Set to 0 to disable.")
     args = parser.parse_args()
 
