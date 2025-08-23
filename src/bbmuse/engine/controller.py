@@ -38,7 +38,6 @@ class Controller:
             for req in handler.get_requires():
                 provider = provides_map.get(req, None)
                 if provider is None:
-                    # TODO: Make this a warning and skip import only for unused representations. The idea: Having bib repr is a smart concept.
                     raise RuntimeError(f"No module provides required representation: {req}")
                 else:
                     if not handler in graph[provider]:
@@ -80,18 +79,23 @@ class Controller:
         logger.info("Start running..")
 
         self._running = True
+
+        logger.info("Call _init() on all modules..")
+        for mod_handler in self.module_handlers:
+            mod_handler.call_init()
+
         while self._running:
             start_time = time()
             
             try:
                 for mod_handler in self.execution_order:
-                    logger.debug("Run update on module %s", mod_handler)
+                    logger.debug("Call _update() on module %s", mod_handler)
                     
                     # TODO also, sanity check by pickling that read-only (required and used) representations are not altered
                     try:
-                        mod_handler.run_update(self.blackboard_views[mod_handler])
+                        mod_handler.call_update(self.blackboard_views[mod_handler])
                     except Exception:
-                        # TODO: Future improv: Break only in dev mode, ignore in release mode.
+                        # TODO: Future improv: Break in dev mode, ignore in release mode.
                         logger.exception(f"Module {mod_handler} produced an error.")
             except KeyboardInterrupt:
                 logger.exception("KeyboardInterrupt detected: signal halt..")
@@ -103,6 +107,10 @@ class Controller:
                 self.halt()
 
             logger.info(f"End of cycle {cycle_count}{"/"+str(quit_after) if quit_after > 0 else ""}, delta={delta_time:.5f}")
+        
+        logger.info("Call _close() on all modules..")
+        for mod_handler in self.module_handlers:
+            mod_handler.call_close()
 
     def halt(self):
         self._running = False

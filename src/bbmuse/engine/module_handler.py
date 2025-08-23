@@ -4,6 +4,8 @@ from pathlib import Path
 import importlib.util
 import inspect
 
+import threading
+
 from bbmuse.engine.base_handler import BaseHandler
 
 logger = logging.getLogger(__name__)
@@ -45,11 +47,24 @@ class ModuleHandler(BaseHandler):
     
     def get_requires(self):
         return getattr(self.get_component(), "REQUIRES", [])
-    
-    def run_update(self, bb):
+
+    def call_update(self, bb):
         self.get_component()._update(bb)
 
     """ Optional attributes"""
     def get_uses(self):
         return getattr(self.get_component(), "USES", [])
-    
+
+    def call_init(self):
+        if callable(getattr(self.get_component(), "_init", None)):
+            try:
+                self.get_component()._init()
+            except Exception:
+                logger.exception("Unable to call _init() on module %s", self.get_name())
+
+    def call_close(self):
+        if callable(getattr(self.get_component(), "_close", None)):
+            try:
+                self.get_component()._close()
+            except Exception:
+                logger.exception("Unable to call _close() on module %s", self.get_name())
