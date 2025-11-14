@@ -17,9 +17,10 @@ class ModuleHandler(BaseHandler):
         module = self.dynamic_import_from_file(self.get_file_location())
 
         # check for required attributes
-        assert isinstance(getattr(module, "PROVIDES", []), list)
-        assert isinstance(getattr(module, "REQUIRES", []), list)
-        assert isinstance(getattr(module, "USES", []), list)
+        assert isinstance(self.get_provides(), list)
+        assert isinstance(self.get_requires(), list)
+        assert isinstance(self.get_uses(), list)
+        assert isinstance(self.get_group(), str)
 
         # check for required methods
         update_method = getattr(module, "_update", None)
@@ -33,7 +34,7 @@ class ModuleHandler(BaseHandler):
             # print only if global log level is INFO or less
             if logger.getEffectiveLevel() <= logging.INFO:
                 # tag output with module name
-                print(f"MODULE {self.get_name()}:", *args, **kwargs)
+                print(f"MODULE {self.get_name()}{"" if self.get_group() == "default" else f" (group:{self.get_group()})"}:", *args, **kwargs)
         module.print = print_with_name_tag
 
         self.set_component(module) # also sets build_status to True
@@ -42,29 +43,30 @@ class ModuleHandler(BaseHandler):
     #    return f"<Module:{self.get_name()}>"
 
     """ Mandatory attributes """
+    def call_update(self, bb):
+        self.get_component()._update(bb)
+
+    """ Optional attributes"""
     def get_provides(self):
         return getattr(self.get_component(), "PROVIDES", [])
     
     def get_requires(self):
         return getattr(self.get_component(), "REQUIRES", [])
 
-    def call_update(self, bb):
-        self.get_component()._update(bb)
-
-    """ Optional attributes"""
     def get_uses(self):
         return getattr(self.get_component(), "USES", [])
+        
+    def get_group(self):
+        return getattr(self.get_component(), "GROUP", "default")
 
     def call_init(self):
         if callable(getattr(self.get_component(), "_init", None)):
-            try:
-                self.get_component()._init()
-            except Exception:
-                logger.exception("Unable to call _init() on module %s", self.get_name())
+            self.get_component()._init()
+        else:
+            logger.debug("No _init() function found in module %s.", self.get_name())
 
     def call_close(self):
         if callable(getattr(self.get_component(), "_close", None)):
-            try:
-                self.get_component()._close()
-            except Exception:
-                logger.exception("Unable to call _close() on module %s", self.get_name())
+            self.get_component()._close()
+        else:
+            logger.debug("No _close() function found in module %s.", self.get_name())

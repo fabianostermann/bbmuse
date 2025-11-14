@@ -1,9 +1,10 @@
 import logging
 
 from collections import defaultdict, deque
-from time import time
+from time import time, sleep
 
 from bbmuse.engine.blackboard import Blackboard
+from bbmuse.engine.control_group import ControlGroup
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +14,24 @@ class Controller:
         self.module_handlers = module_handlers
         self.blackboard = blackboard
 
+        self.groups = self.make_groups()
+        
+    def make_groups(self):
+        grouped_handlers = defaultdict(list)
+        for handler in self.module_handlers:
+            grouped_handlers[handler.get_group()].append(handler)
+
+        groups = []
+        for handlers in grouped_handlers.values():
+            groups.append(ControlGroup(handlers, self.blackboard))
+        return groups
+
     def build(self):
+         # test if dependency graph is is complete
         self.build_execution_order()
-        self.build_blackboard_views()
+
+        for group in self.groups:
+            group.build(self.execution_order)
 
     def build_execution_order(self):
         # construct mapping: repr -> provider
@@ -64,50 +80,39 @@ class Controller:
 
         self.execution_order, self.dependencies = exec_order, graph
 
-    def build_blackboard_views(self):
-        bb_views = {}
-        for handler in self.module_handlers:
-            bb_views[handler] = self.blackboard.create_view(handler)
+    def run(self, quit_after=-1):
 
-        self.blackboard_views = bb_views
-
-    def run(self, quit_after=0):
-
-        cycle_count = 0
-        logger.info(f"Execution order: %s", self.execution_order)
-        logger.info(f"Blackboard contents: %s", self.blackboard.list_content())
-        logger.info("Start running..")
-
-        self._running = True
+        logger.info("Init threads..")
 
         logger.info("Call _init() on all modules..")
         for mod_handler in self.module_handlers:
             mod_handler.call_init()
 
-        while self._running:
-            start_time = time()
-            
-            try:
-                for mod_handler in self.execution_order:
-                    logger.debug("Call _update() on module %s", mod_handler)
-                    
-                    # TODO also, sanity check by pickling that read-only (required and used) representations are not altered
-                    try:
-                        mod_handler.call_update(self.blackboard_views[mod_handler])
-                    except Exception:
-                        # TODO: Future improv: Break in dev mode, ignore in release mode.
-                        logger.exception(f"Module {mod_handler} produced an error.")
-            except KeyboardInterrupt:
-                logger.exception("KeyboardInterrupt detected: signal halt..")
-                self.halt()
+        for group in self.groups:
+            logger.info("Attempting to start thread '%s'..", group.name)
+            group.start()
 
-            delta_time = time() - start_time
-            cycle_count += 1
-            if cycle_count == quit_after:
+        self._running = True
+        start_time = time()
+        try:
+            while self._running:
+                sleep(0.1)
+                if quit_after >= 0 and time() - start_time > quit_after:
+                    self.halt()
+        except KeyboardInterrupt:
+                logger.warning("KeyboardInterrupt detected: request halt and join..")
                 self.halt()
+        finally:
+            for group in self.groups:
+                group.halt()
+            logger.debug(f"Requested halt after %.3f secs..", time() - start_time)
 
-            logger.info(f"End of cycle {cycle_count}{"/"+str(quit_after) if quit_after > 0 else ""}, delta={delta_time:.5f}")
-        
+        for group in self.groups:
+            group.halt_and_join()
+            logger.debug("Group '%s' accepted join with main thread.", group.name)
+
+        logger.info("All groups joined with main thread.")
+
         logger.info("Call _close() on all modules..")
         for mod_handler in self.module_handlers:
             mod_handler.call_close()
