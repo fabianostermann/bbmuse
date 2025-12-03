@@ -12,7 +12,7 @@ class Blackboard:
         for rep in representation_handlers:
             self.register(rep)
 
-        logger.debug("Blackboard initialized: %s", self.list_content())
+        logger.info("Blackboard initialized: %s", self.list_content())
 
     def register(self, rep_handler: RepresentationHandler):
         rep_name = rep_handler.get_name()

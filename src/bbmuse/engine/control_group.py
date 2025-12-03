@@ -11,7 +11,7 @@ class ControlGroup:
 
     def __init__(self, module_handlers, blackboard):
         group_names = list(set([handler.get_group() for handler in module_handlers]))
-        assert len(group_names) == 1, f"Got modules from {len(group_names)} groups: {group_names}"
+        assert len(group_names) == 1, f"Got modules from {len(group_names)} groups: {group_names}. But all modules must be in the same group."
 
         self.name = group_names[0]
         self.module_handlers = module_handlers
@@ -49,7 +49,6 @@ class ControlGroup:
     def run(self):
         cycle_count = 0
         self.logger.info(f"Execution order: %s", self.execution_order)
-        self.logger.info(f"Blackboard contents: %s", self.blackboard.list_content())
 
         self._running = True
 
@@ -63,7 +62,7 @@ class ControlGroup:
                     
                     # TODO also, sanity check by pickling that read-only (required and used) representations are not altered
                     try:
-                        if self._running: # check if not already halted
+                        if self._running and mod_handler.is_active(): # check if not already halted
                             mod_handler.call_update(self.blackboard_views[mod_handler])
                     except Exception:
                         # TODO: Future improv: Break in dev mode, ignore in release mode.
@@ -75,7 +74,7 @@ class ControlGroup:
             delta_time = time() - start_time
             cycle_count += 1
 
-            self.logger.info(f"End of cycle {cycle_count}, delta={delta_time:.5f}")
+            self.logger.debug(f"End of cycle {cycle_count}, delta={delta_time:.5f}")
 
     def halt(self):
         self._running = False

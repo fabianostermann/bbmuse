@@ -2,6 +2,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# TODO: include groups in visualization!
+# TODO: Try to repeat visualization multiple times (iterate over seed) and count "crossed lines"
 def plot_dependency_graph(project, filename="graph.png", include_uses=True):
     """Plot the bipartite dependency graph (Representations & Modules) layered by hard deps.
     

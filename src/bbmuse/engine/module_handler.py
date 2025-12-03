@@ -5,6 +5,7 @@ import importlib.util
 import inspect
 
 import threading
+GLOBAL_UPDATE_LOCK = threading.Lock()
 
 from bbmuse.engine.base_handler import BaseHandler
 
@@ -15,6 +16,9 @@ class ModuleHandler(BaseHandler):
     def build(self):
         self.reset_build_status()
         module = self.dynamic_import_from_file(self.get_file_location())
+
+        # attributes
+        self._is_running = False
 
         # check for required attributes
         assert isinstance(self.get_provides(), list)
@@ -33,7 +37,7 @@ class ModuleHandler(BaseHandler):
         def print_with_name_tag(*args, **kwargs):
             # print only if global log level is INFO or less
             if logger.getEffectiveLevel() <= logging.INFO:
-                # tag output with module name
+                # tag output with module name and group name
                 print(f"MODULE {self.get_name()}{"" if self.get_group() == "default" else f" (group:{self.get_group()})"}:", *args, **kwargs)
         module.print = print_with_name_tag
 
@@ -44,7 +48,16 @@ class ModuleHandler(BaseHandler):
 
     """ Mandatory attributes """
     def call_update(self, bb):
-        self.get_component()._update(bb)
+        # make updates atomic
+        with GLOBAL_UPDATE_LOCK:
+            self._is_running = True
+            try:
+                self.get_component()._update(bb)
+            finally:
+                self._is_running = False
+
+    def is_running(self):
+        return self._is_running
 
     """ Optional attributes"""
     def get_provides(self):
@@ -58,6 +71,9 @@ class ModuleHandler(BaseHandler):
         
     def get_group(self):
         return getattr(self.get_component(), "GROUP", "default")
+        
+    def is_active(self):
+        return getattr(self.get_component(), "ACTIVE", True)
 
     def call_init(self):
         if callable(getattr(self.get_component(), "_init", None)):

@@ -15,6 +15,7 @@ from bbmuse.engine.representation_handler import RepresentationHandler
 
 logger = logging.getLogger(__name__)
 
+# TODO: Check for required reps that are unused (linting?)
 class BbMuseProject():
 
     def __init__(self, project_dir):
@@ -84,7 +85,7 @@ class BbMuseProject():
                     handler.build()
                     rep_handlers.append(handler)
                 except Exception:
-                    logger.warning("Build failed for representation %s. Skip and ignore.", handler)
+                    logger.exception("Build failed for representation %s. Skip and ignore.", handler)
             else:
                 logger.warning("%s not found in provided representations. Skip import.", handler.get_name())
 
