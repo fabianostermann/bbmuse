@@ -117,5 +117,17 @@ class Controller:
         for mod_handler in self.module_handlers:
             mod_handler.call_close()
 
+        for mod_handler in self.module_handlers:
+            stats = mod_handler.get_timing_stats()
+            if stats:
+                logger.info("Timing statistics for %s: mean=%sms min=%sms max=%sms",
+                    mod_handler.get_name(),
+                    round(stats["mean"], 3),
+                    round(stats["min"], 3),
+                    round(stats["max"], 3),
+                )
+            else:
+                logger.info("No timing statistics available for %s.", mod_handler.get_name())
+
     def halt(self):
         self._running = False

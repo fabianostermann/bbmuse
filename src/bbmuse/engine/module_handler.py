@@ -4,6 +4,8 @@ from pathlib import Path
 import importlib.util
 import inspect
 
+from time import perf_counter
+
 import threading
 GLOBAL_UPDATE_LOCK = threading.Lock()
 
@@ -19,6 +21,7 @@ class ModuleHandler(BaseHandler):
 
         # attributes
         self._is_running = False
+        self.timing_stats = None
 
         # check for required attributes
         assert isinstance(self.get_provides(), list)
@@ -52,7 +55,11 @@ class ModuleHandler(BaseHandler):
         with GLOBAL_UPDATE_LOCK:
             self._is_running = True
             try:
+                start_time = perf_counter()
                 self.get_component()._update(bb)
+
+                delta_secs = perf_counter() - start_time
+                self._update_timing_stats(delta_secs)
             finally:
                 self._is_running = False
 
@@ -86,3 +93,24 @@ class ModuleHandler(BaseHandler):
             self.get_component()._close()
         else:
             logger.debug("No _close() function found in module %s.", self.get_name())
+
+    def _update_timing_stats(self, delta_secs):
+        delta = delta_secs * 1000 # sec -> ms
+        if not self.timing_stats:
+            self.timing_stats = {
+                "n": 1,
+                "mean": delta,
+                "min": delta,
+                "max": delta,
+            }
+        else:
+            stats = self.timing_stats
+            stats["n"] += 1
+            if delta < stats["min"]:
+                stats["min"] = delta
+            if delta > stats["max"]:
+                stats["max"] = delta
+            stats["mean"] += (delta - stats["mean"]) / stats["n"]
+
+    def get_timing_stats(self):
+        return self.timing_stats
