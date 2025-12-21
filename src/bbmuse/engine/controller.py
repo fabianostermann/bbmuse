@@ -3,6 +3,8 @@ import logging
 from collections import defaultdict, deque
 from time import time, sleep
 
+import gc
+
 from bbmuse.engine.blackboard import Blackboard
 from bbmuse.engine.control_group import ControlGroup
 
@@ -80,7 +82,7 @@ class Controller:
 
         self.execution_order, self.dependencies = exec_order, graph
 
-    def run(self, quit_after=-1):
+    def run(self, quit_after=-1, run_mode=0):
 
         logger.info("Init threads..")
 
@@ -88,17 +90,29 @@ class Controller:
         for mod_handler in self.module_handlers:
             mod_handler.call_init()
 
+        if run_mode > 0: # PERFORM mode
+            gc.disable()
+        logger.debug("Garbage collector %s.", "enabled" if gc.isenabled() else "disabled")
+
         for group in self.groups:
             logger.info("Attempting to start thread '%s'..", group.name)
-            group.start()
+            group.start(run_mode=run_mode)
 
         self._running = True
         start_time = time()
         try:
             while self._running:
-                sleep(0.1)
+                sleep(0.5)
                 if quit_after >= 0 and time() - start_time > quit_after:
                     self.halt()
+                for group in self.groups:
+                    if not group.is_alive():
+                        if run_mode <= 0:# NORMAL mode
+                            logger.error("Group %s stopped running. Not in PERFORM mode, hence halt program..", group.name)
+                            self.halt()
+                        else: # PERFORM mode
+                            logger.warning("Group %s stopped running in PERFORM mode. Restarting..", group.name)
+                            group.start(run_mode=run_mode)
         except KeyboardInterrupt:
                 logger.warning("KeyboardInterrupt detected: request halt and join..")
                 self.halt()
@@ -116,11 +130,14 @@ class Controller:
         logger.info("Call _close() on all modules..")
         for mod_handler in self.module_handlers:
             mod_handler.call_close()
+        
+        # if garbage collector has been disabled
+        gc.enable()
 
         for mod_handler in self.module_handlers:
             stats = mod_handler.get_timing_stats()
             if stats:
-                logger.info("Timing statistics for %s: mean=%sms min=%sms max=%sms",
+                logger.debug("Timing statistics for %s: mean=%sms min=%sms max=%sms",
                     mod_handler.get_name(),
                     round(stats["mean"], 3),
                     round(stats["min"], 3),

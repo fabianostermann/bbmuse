@@ -17,7 +17,7 @@ class ControlGroup:
         self.module_handlers = module_handlers
         self.blackboard = blackboard
 
-        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread = None
 
         self.logger = base_logger
         if self.name != "default":
@@ -36,7 +36,9 @@ class ControlGroup:
 
         self.blackboard_views = bb_views
 
-    def start(self):
+    def start(self, run_mode=0):
+        self.run_mode = run_mode
+        self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
 
     def halt_and_join(self, timeout=None):
@@ -44,7 +46,7 @@ class ControlGroup:
         self.thread.join(timeout=timeout)
     
     def is_alive(self):
-        self.thread.is_alive()
+        return self.thread.is_alive()
 
     def run(self):
         cycle_count = 0
@@ -59,14 +61,29 @@ class ControlGroup:
             try:
                 for mod_handler in self.execution_order:
                     self.logger.debug("Call _update() on module %s", mod_handler)
-                    
-                    # TODO also, sanity check by pickling that read-only (required and used) representations are not altered
+
                     try:
-                        if self._running and mod_handler.is_active(): # check if not already halted
+                        if self._running and mod_handler.is_active():
                             mod_handler.call_update(self.blackboard_views[mod_handler])
+
+                        if self.run_mode < 0: # DEBUG mode
+                            try:
+                                for rep_name in mod_handler.get_provides():
+                                    self.blackboard.get(rep_name).call_validate()
+                            except Exception:
+                                self.logger.exception(f"Representation {rep_name} did not pass validation check.")
+                                self.halt()
+                            # TODO in DEBUG mode: additional validation by pickling that read-only (required and used) representations are not altered
+
                     except Exception:
-                        # TODO: Future improv: Break in dev mode, ignore in release mode.
+                        # Stop in dev mode (normal), ignore in release mode (perform).
                         self.logger.exception(f"Module {mod_handler} produced an error.")
+                        if self.run_mode <= 0: # DEBUG or NORMAL mode
+                            self.logger.info("Not in PERFORM mode: trigger halt..")
+                            self.halt()
+                        else:
+                            self.logger.debug("In PERFORM mode: ignoring the error.")
+
             except KeyboardInterrupt:
                 self.logger.exception("KeyboardInterrupt detected: signal halt..")
                 self.halt()

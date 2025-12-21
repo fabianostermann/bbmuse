@@ -17,6 +17,12 @@ class RepresentationHandler(BaseHandler):
     #def __str__(self):
     #    return f"<Repr:{self.get_name()}>"
 
+    def call_validate(self):
+        if callable(getattr(self.get_component(), "_validate", None)):
+            self.get_component()._validate()
+        else:
+            logger.debug("No _init() function found in representation %s.", self.get_name())
+
     def create_view(self, read_only=False):
         return _RepresentationView(self.get_component(), read_only=read_only)
     

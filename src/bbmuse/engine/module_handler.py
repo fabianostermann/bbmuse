@@ -51,17 +51,17 @@ class ModuleHandler(BaseHandler):
 
     """ Mandatory attributes """
     def call_update(self, bb):
-        # make updates atomic
-        with GLOBAL_UPDATE_LOCK:
-            self._is_running = True
-            try:
-                start_time = perf_counter()
-                self.get_component()._update(bb)
+        # TODO make atomic updates an option
+        #with GLOBAL_UPDATE_LOCK:
+        self._is_running = True
+        try:
+            start_time = perf_counter()
+            self.get_component()._update(bb)
 
-                delta_secs = perf_counter() - start_time
-                self._update_timing_stats(delta_secs)
-            finally:
-                self._is_running = False
+            delta_secs = perf_counter() - start_time
+            self._update_timing_stats(delta_secs)
+        finally:
+            self._is_running = False
 
     def is_running(self):
         return self._is_running
