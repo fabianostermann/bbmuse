@@ -21,9 +21,12 @@ More example projects can be found online soon.
 - [ ] Create and link example collection
 - [ ] separate TODO list from README (maybe use github wiki?)
 
+- [ ] think about the atomic update lock in module_handler. Maybe optional per module?
+
 - [ ] real multiprocessing (main problem: share representations between processes -> better: threading + native libs w/o GIL like numpy)
 
 - [ ] profiling: time for system calls vs module calculations? And startup time
+- [ ] Make timing stats a command-line option?
 
 - [x] Introduce run modes: DEBUG, NORMAL, PERFORM (NaoDevil eq.: DEBUG, DEVELOP, RELEASE)
 - [x] DEBUG mode: sanity check representation (introduce an optional hook for that: `_validate()`).
