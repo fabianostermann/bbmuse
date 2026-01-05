@@ -56,7 +56,7 @@ class Controller:
             for req in handler.get_requires():
                 provider = provides_map.get(req, None)
                 if provider is None:
-                    raise RuntimeError(f"No module provides required representation: {req}")
+                    raise RuntimeError(f"No module provides repr {req} which {handler} requires.")
                 else:
                     if not handler in graph[provider]:
                         graph[provider].append(handler)
@@ -137,7 +137,7 @@ class Controller:
         for mod_handler in self.module_handlers:
             stats = mod_handler.get_timing_stats()
             if stats:
-                logger.debug("Timing statistics for %s: mean=%sms min=%sms max=%sms",
+                logger.info("Timing statistics for %s: mean=%sms min=%sms max=%sms",
                     mod_handler.get_name(),
                     round(stats["mean"], 3),
                     round(stats["min"], 3),
