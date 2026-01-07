@@ -6,7 +6,7 @@ authors = [
 ]
 description = "BlackBoard MUSic Engine - A blackboard system for realtime AI music generation"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
