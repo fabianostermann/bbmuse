@@ -41,7 +41,8 @@ class ModuleHandler(BaseHandler):
             # print only if global log level is INFO or less
             if logger.getEffectiveLevel() <= logging.INFO:
                 # tag output with module name and group name
-                print(f"MODULE {self.get_name()}{"" if self.get_group() == "default" else f" (group:{self.get_group()})"}:", *args, **kwargs)
+                group = "" if self.get_group() == "default" else f" (group:{self.get_group()})"
+                print(f"MODULE {self.get_name()}{group}:", *args, **kwargs)
         module.print = print_with_name_tag
 
         self.set_component(module) # also sets build_status to True
