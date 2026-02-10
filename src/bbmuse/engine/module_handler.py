@@ -113,5 +113,13 @@ class ModuleHandler(BaseHandler):
                 stats["max"] = delta
             stats["mean"] += (delta - stats["mean"]) / stats["n"]
 
-    def get_timing_stats(self):
-        return self.timing_stats
+    def print_timing_stats(self):
+        if self.timing_stats:
+            logger.info("Timing statistics for %s: mean=%sms min=%sms max=%sms",
+                self.get_name(),
+                round(self.timing_stats["mean"], 3),
+                round(self.timing_stats["min"], 3),
+                round(self.timing_stats["max"], 3),
+            )
+        else:
+            logger.info("No timing statistics available for %s.", mod_handler.get_name())
