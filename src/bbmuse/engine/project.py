@@ -61,13 +61,16 @@ class BbMuseProject():
         self.representation_handlers = []
 
     def build_handlers(self):
-        all_provides = []
+        all_provides_and_requires = []
         mod_handlers = []
         for handler in self.potential_module_handlers:
             try:
                 handler.build()
-                all_provides += handler.get_provides()
-                mod_handlers.append(handler)
+                if len(handler.get_provides()) > 0:
+                    all_provides_and_requires += handler.get_provides() + handler.get_requires()
+                    mod_handlers.append(handler)
+                else:
+                    logger.info("Module %s does not provide any representation. Skip.", handler.get_name())
             except Exception:
                 logger.exception("Build failed for module %s. Skip and ignore.", handler)
 
@@ -76,18 +79,18 @@ class BbMuseProject():
             assert handler.get_build_status(), f"Build status is False for {handler}"
 
         self.module_handlers = mod_handlers
-        logger.debug("List of all provided representations: %s", all_provides)
+        logger.debug("List of all provided and required representations: %s", all_provides_and_requires)
 
         rep_handlers = []
         for handler in self.potential_representation_handlers:
-            if handler.get_name() in all_provides:
+            if handler.get_name() in all_provides_and_requires:
                 try:
                     handler.build()
                     rep_handlers.append(handler)
                 except Exception:
                     logger.exception("Build failed for representation %s. Skip and ignore.", handler)
             else:
-                logger.warning("%s not found in provided representations. Skip import.", handler.get_name())
+                logger.warning("%s not found in provided or required representations. Skip import.", handler.get_name())
 
         assert rep_handlers, "No representations were successfully build."
         if handler in rep_handlers:

@@ -56,7 +56,7 @@ class Controller:
             for req in handler.get_requires():
                 provider = provides_map.get(req, None)
                 if provider is None:
-                    raise RuntimeError(f"No module provides repr {req} which {handler} requires.")
+                    logger.debug("No module provides representation %s which module %s requires. Therefore it is irrelevant to the execution order.", req, handler)
                 else:
                     if not handler in graph[provider]:
                         graph[provider].append(handler)
