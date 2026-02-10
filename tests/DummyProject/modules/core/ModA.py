@@ -1,4 +1,5 @@
 GROUP = "special"
+REQUIRES = [ "RepConfig" ]
 USES = [ "Clock" ]
 PROVIDES = [ "RepA" ]
 
