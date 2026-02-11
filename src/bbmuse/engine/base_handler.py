@@ -15,6 +15,8 @@ class BaseHandler():
         self._file_location = path.absolute()
         self._name = path.stem
         
+        self.consider_hot_reload()
+        
         self._component = None
         logger.debug(f"Init handler for {self.get_name()} located at {self.get_file_location()}")
 
@@ -26,6 +28,9 @@ class BaseHandler():
 
     def build(self):
         raise NotImplementedError("Do not use base class. Use subclasses.")
+        
+    def hot_reload(self):
+        raise NotImplementedError("Do not use base class. Use subclasses.")
 
     def dynamic_import_from_file(self, filepath):
         """
@@ -36,8 +41,25 @@ class BaseHandler():
         spec.loader.exec_module(python_module)
         return python_module
         
+    def consider_hot_reload(self):
+        if not hasattr(self, "_last_mtime"):
+            self._last_mtime = self.get_mtime()
+            return
+    	
+        curr_mtime = self.get_mtime()
+        # reload if last modification time is older than 1 second
+        if self._last_mtime + 1 < curr_mtime:
+            print("test")
+            self.hot_reload()
+            self._last_mtime = curr_mtime
+    	
+    def get_mtime(self):
+        if self._file_location:
+            return self._file_location.stat().st_mtime
+        else:
+            return None
+        
     def get_component(self):
-        assert self._component is not None
         return self._component
     
     def set_component(self, c):

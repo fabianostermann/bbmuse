@@ -60,12 +60,16 @@ class ControlGroup:
             
             try:
                 for mod_handler in self.execution_order:
-                    self.logger.debug("Call _update() on module %s", mod_handler)
+                    #self.logger.debug("Call _update() on module %s", mod_handler)
 
                     try:
+                        if self.run_mode <= 0: # DEVELOP or DEBUG mode
+                            for rep_name in mod_handler.get_requires():
+                                self.blackboard.get(rep_name).consider_hot_reload()
+                    
                         if self._running and mod_handler.is_active():
                             mod_handler.call_update(self.blackboard_views[mod_handler])
-
+                                
                         if self.run_mode < 0: # DEBUG mode
                             try:
                                 for rep_name in mod_handler.get_provides():
@@ -91,7 +95,7 @@ class ControlGroup:
             delta_time = time() - start_time
             cycle_count += 1
 
-            self.logger.debug(f"End of cycle {cycle_count}, delta={delta_time:.5f}")
+            #self.logger.debug(f"End of cycle {cycle_count}, delta={delta_time:.5f}")
 
     def halt(self):
         self._running = False

@@ -16,8 +16,11 @@ logger = logging.getLogger(__name__)
 class ModuleHandler(BaseHandler):
 
     def build(self):
+        logger.debug("Building %s..", self)
+        
         module = self.dynamic_import_from_file(self.get_file_location())
-
+        self.set_component(module)
+    
         # attributes
         self._is_running = False
         self.timing_stats = None
@@ -44,7 +47,20 @@ class ModuleHandler(BaseHandler):
                 print(f"MODULE {self.get_name()}{group}:", *args, **kwargs)
         module.print = print_with_name_tag
 
-        self.set_component(module) # also sets build_status to True
+    def hot_reload(self):
+        logger.debug("Hot-reloading %s..", self)
+        old_component = self.get_component()
+        try:
+            self.build()
+            # if this is a hot-reload, close old module and init new one
+            if old_component is not None:
+                if callable(getattr(old_component, "_close", None)):
+                    old_component._close()
+            self.call_init()    
+        except Exception:
+            logger.exception("Error when building module %s. Keeping former instance.", self)
+            self._component = old_component
+        logger.info("Hot-reload on %s was successful.", self)
     
     #def __str__(self):
     #    return f"<Module:{self.get_name()}>"
@@ -52,7 +68,10 @@ class ModuleHandler(BaseHandler):
     """ Mandatory attributes """
     def call_update(self, bb):
         # TODO make atomic updates an option
-        with GLOBAL_UPDATE_LOCK:
+        with GLOBAL_UPDATE_LOCK:        
+            # TODO: Hot-reload only in mode DEVELOP and DEBUG, not in PERFORM!
+            self.consider_hot_reload()
+            
             self._is_running = True
             try:
                 start_time = perf_counter()

@@ -12,7 +12,18 @@ class RepresentationHandler(BaseHandler):
 
     def build(self):
         rep = self.dynamic_import_from_file(self.get_file_location())
+        self.call_validate()
         self.set_component(rep) # also sets build_status to True
+        
+    def hot_reload(self):
+        logger.debug("Hot-reloading %s..", self)
+        old_component = self.get_component()
+        try:
+            self.build() 
+        except Exception:
+            logger.exception("Error when building representation %s. Keeping former instance.", self)
+            self._component = old_component
+        logger.info("Hot-reload on %s was successful.", self)
 
     #def __str__(self):
     #    return f"<Repr:{self.get_name()}>"
@@ -20,9 +31,7 @@ class RepresentationHandler(BaseHandler):
     def call_validate(self):
         if callable(getattr(self.get_component(), "_validate", None)):
             self.get_component()._validate()
-        else:
-            logger.debug("No _init() function found in representation %s.", self.get_name())
-
+            
     def create_view(self, read_only=False):
         return _RepresentationView(self.get_component(), read_only=read_only)
     
