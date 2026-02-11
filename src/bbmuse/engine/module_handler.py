@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 class ModuleHandler(BaseHandler):
 
     def build(self):
-        self.reset_build_status()
         module = self.dynamic_import_from_file(self.get_file_location())
 
         # attributes

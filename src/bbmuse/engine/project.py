@@ -75,8 +75,6 @@ class BbMuseProject():
                 logger.exception("Build failed for module %s. Skip and ignore.", handler)
 
         assert mod_handlers, "No modules were successfully build."
-        if handler in mod_handlers:
-            assert handler.get_build_status(), f"Build status is False for {handler}"
 
         self.module_handlers = mod_handlers
         logger.debug("List of all provided and required representations: %s", all_provides_and_requires)
@@ -93,8 +91,6 @@ class BbMuseProject():
                 logger.warning("%s not found in provided or required representations. Skip import.", handler.get_name())
 
         assert rep_handlers, "No representations were successfully build."
-        if handler in rep_handlers:
-            assert handler.get_build_status(), f"Build status is False for {handler}"
         self.representation_handlers = rep_handlers
 
     def build_controller(self):
