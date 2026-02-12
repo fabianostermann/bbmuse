@@ -1,5 +1,5 @@
 import logging
-import sys
+import sys, os
 
 from pathlib import Path
 import importlib.util
@@ -21,6 +21,8 @@ class BbMuseProject():
     def __init__(self, project_dir):
         self.controller = None
         self.config = Config(project_dir)
+        
+        os.chdir(self.config.get_project_dir())
 
     def build_all(self):
         self.prepare_handlers()

@@ -44,7 +44,7 @@ class Config(dict):
         logger.debug("Error log file: %s", error_logfile)
     
     def get_project_dir(self):
-        return self._project_dir
+        return Path(self._project_dir).absolute()
         
     def setup_error_logging(self, logfile):
         root_logger = logging.getLogger()
