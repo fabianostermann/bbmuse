@@ -1,6 +1,8 @@
 # BlackBoard MUSic Engine
 
-A blackboard system for realtime AI music generation.
+BbMuse is an open-source platform-independent Python framework and backend for interactive AI systems based on the good old concept of blackboard systems.
+It aims to fill the gap between ad hoc multi-agent systems that require complex manual "wiring" and monolithic neural models that act as opaque "black boxes".
+By adapting a modern blackboard architecture from real-time robotics, we create a system where real-time musical composition is treated as a distributed hierarchical decision-making process.
 
 ## Links
 
