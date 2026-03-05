@@ -12,6 +12,8 @@ By adapting a modern blackboard architecture from real-time robotics, we create 
 
 - Templates and example projects will be released in another online repository soon. Link will be provided here.
 
+- A corresponding paper was recently accepted for the International Computer Music Conference (ICMC). Link will be provided soon.
+
 ## Installation and first-run experience
 
 To comfortably install via PyPI, use: `pip install bbmuse`
