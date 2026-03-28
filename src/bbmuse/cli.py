@@ -88,6 +88,7 @@ def process_args():
         logging.getLogger().setLevel(logging.WARNING)
     if args.silent:
         logging.getLogger().setLevel(logging.CRITICAL+1)
+        sys.stdout = None
 
     logger.debug("Args: %s", args)
 
