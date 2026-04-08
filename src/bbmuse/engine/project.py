@@ -107,5 +107,20 @@ class BbMuseProject():
         self.controller.run(*args, **kwargs)
         
 
+    """
+    Some getters for the external editor and bblearn features
+    """
+    def get_module_handlers(self):
+        return self.module_handlers
+
+    def get_representation_handlers(self):
+        return self.representation_handlers
+
+    def get_controller(self):
+        return self.controller
+
+    def get_blackboard(self):
+        return self.controller.blackboard
+
 
 

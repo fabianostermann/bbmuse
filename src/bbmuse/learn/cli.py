@@ -33,18 +33,16 @@ def process_args():
     
     subparsers = parser.add_subparsers(dest="command")
     
-    sub_enable = subparsers.add_parser("enable", help='TODO write help', parents=[common])
-    sub_enable.add_argument('var', nargs=1, type=str, help="The variable name to set")
-    sub_enable.add_argument('module_path', nargs=1, help="Path to module")
+    sub_enable = subparsers.add_parser("arm", help='TODO write help', parents=[common])
+    sub_enable.add_argument('modules', nargs="*", help="Path to/name of modules to arm")
     
-    sub_disable = subparsers.add_parser("disable", help='TODO write help', parents=[common])
-    sub_disable.add_argument('var', type=str, nargs=1, help="The variable name to set")
-    sub_disable.add_argument('module_path', nargs=1, help="Path to module")
+    sub_disable = subparsers.add_parser("disarm", help='TODO write help', parents=[common])
+    sub_disable.add_argument('modules', nargs="*", help="Path to/name of modules to disarm")
     
     sub_status = subparsers.add_parser("status", help='TODO write help', parents=[common])
-    sub_status.add_argument('module_path', nargs='?', help="Path to module")
+    sub_status.add_argument('modules', nargs='?', help="Path to module")
     
-    sub_run = subparsers.add_parser("run", help='TODO write help', parents=[common])
+    sub_collect = subparsers.add_parser("collect", help='Starts bbmuse and collects data of armed modules.', parents=[common])
     
     sub_train = subparsers.add_parser("train", help='TODO write help', parents=[common])
     sub_train.add_argument('module_path', nargs=1, help="Path to module")
