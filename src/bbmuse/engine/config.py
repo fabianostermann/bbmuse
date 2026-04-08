@@ -13,11 +13,12 @@ class Config(dict):
                 "application": {
                     "name": "Untitled",
                     "description": "No description available.",
-                    "icon": "icon.png"
+                    "icon": "icon.svg",
                 },
                 "path": {
                     "modules": [ "modules/" ],
-                    "representations": [ "representations/" ]
+                    "representations": [ "representations/" ],
+                    "bblearn": [ "bblearn/" ],
                 },
             }
         )
