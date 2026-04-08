@@ -7,3 +7,4 @@ description = "Used for debugging the code base of bbmuse"
 
 [path]
 modules = ["modules/"]
+representations = ["representations"]
