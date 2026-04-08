@@ -33,25 +33,25 @@ def process_args():
     
     subparsers = parser.add_subparsers(dest="command")
     
-    sub_enable = subparsers.add_parser("arm", help='TODO write help', parents=[common])
-    sub_enable.add_argument('modules', nargs="*", help="Path to/name of modules to arm")
+    sub_enable = subparsers.add_parser("arm", help='Arm modules (arming means to enable recording mode for the specified modules)', parents=[common])
+    sub_enable.add_argument('modules', nargs="*", help="Path or name of modules")
     
-    sub_disable = subparsers.add_parser("disarm", help='TODO write help', parents=[common])
-    sub_disable.add_argument('modules', nargs="*", help="Path to/name of modules to disarm")
+    sub_disable = subparsers.add_parser("disarm", help='Disarm modules (disarming means to disable recording mode for the specified modules)', parents=[common])
+    sub_disable.add_argument('modules', nargs="*", help="Path or name of modules")
     
     sub_status = subparsers.add_parser("status", help='TODO write help', parents=[common])
-    sub_status.add_argument('modules', nargs='?', help="Path to module")
+    sub_status.add_argument('module', nargs='?', help="Path or name of a module. If none is given, prints a summary of all modules.")
     
     sub_collect = subparsers.add_parser("collect", help='Starts bbmuse and collects data of armed modules.', parents=[common])
     
-    sub_train = subparsers.add_parser("train", help='TODO write help', parents=[common])
-    sub_train.add_argument('module_path', nargs=1, help="Path to module")
+    sub_train = subparsers.add_parser("train", help='Train a specific module based on previously collected data.', parents=[common])
+    sub_train.add_argument('module', nargs=1, help="Path or name of a module")
     
     sub_apply = subparsers.add_parser("apply", help='TODO write help', parents=[common])
-    sub_apply.add_argument('module_path', nargs=1, help="Path to module")
+    sub_apply.add_argument('module', nargs=1, help="Path or name of a module")
     
     sub_restore = subparsers.add_parser("restore", help='TODO write help', parents=[common])
-    sub_restore.add_argument('module_path', nargs=1, help="Path to module")
+    sub_restore.add_argument('module', nargs=1, help="Path or name of a module")
     
     #sub_restore = subparsers.add_parser("help")
     

@@ -53,35 +53,22 @@ class Session():
         logger.debug("args: %s", args)
         modules_to_arm = []
         for mod in modules:
-            found = False
-            for mh in self.project.get_module_handlers():
-                try:
-                    if mh.get_file_location().samefile(Path(mod)):
-                        logger.debug("Found path equivalence: %s", mod)
-                        modules_to_arm.append(mh)
-                        found = True
-                        break
-                except Exception:
-                    pass
-                if mh.get_name().lower() == mod.lower():
-                    logger.debug("Found name equivalence: %s", mod)
-                    modules_to_arm.append(mh)
-                    found = True
-                    break
-            if not found:
+            found_mod = self.identify_module(mod)
+            if found_mod:
+                modules_to_arm.append(found_mod)
+            else:
                 logger.error("Unable to find module: %s", mod)
                 sys.exit(1)
                 
-        
         # remove duplicates
         modules_to_arm = list(set(modules_to_arm))
         logger.debug("Modules to %s: %s", "disarm" if disarm else "arm", modules_to_arm)
 
         for mod in modules_to_arm:
-            mod_dir = self._modules_dir / mod.get_name().lower()
+            mod_dir = self.get_module_dir(mod)
             if not mod_dir.exists():
                 if disarm:
-                    logger.info("Module %s was never armed.", mod)
+                    logger.info("Module %s is untracked.", mod)
                     continue
                 else: # arm
                     mod_dir.mkdir()
@@ -93,11 +80,57 @@ class Session():
                 armed_indicator.touch()
                 logger.info("Module %s armed.", mod)
 
+    def get_module_dir(self, module_handler):
+        assert not module_handler is None, "Argument should be a valid ModuleHandler object"
+        return self._modules_dir / module_handler.get_name().lower()
+
+    def is_armed(self, module_handler):
+        mod_dir = self.get_module_dir(module_handler)
+        return (mod_dir / ".armed").exists()
+
+    def identify_module(self, mod):
+        """
+        mod: Name or path of module
+        """
+        for mh in self.project.get_module_handlers():
+            try:
+                if mh.get_file_location().samefile(Path(mod)):
+                    logger.debug("Found path equivalence: %s", mod)
+                    return mh
+            except Exception:
+                pass
+            if mh.get_name().lower() == mod.lower():
+                logger.debug("Found name equivalence: %s", mod)
+                return mh
+        return None
+
     def disarm(self, args):
         self.arm(args, disarm=True)
 
     def status(self, args):
-        logger.error("status() is not implemented yet.")
+        module = args.module
+        if module is None:
+            # TODO: Run status on all modules and provide compact overview
+            logger.info("Global status mode not implemented yet.")
+            sys.exit(0)
+        else:
+            self.print_module_info(module)
+
+    def print_module_info(self, module):
+        # collect info
+        mh = self.identify_module(module)
+        if mh is None:
+            # TODO module is present but skipped in the dependency graph, could run BaseHandler(path) manually here in the future
+            logger.info("Unable to find module: %s (not existing or not in the current dependency graph)", module)
+            return
+            
+        mod_dir = self.get_module_dir(mh)
+        if not mod_dir.exists():
+            logger.info("%s is untracked. Run 'bblearn arm %s' first.", mh, mh.get_name())
+            return
+        
+        is_armed = self.is_armed(mh)
+        logger.info("%s %s", mh, "is armed." if is_armed else "is disarmed.")
 
     def collect(self, args):
         logger.error("collect() is not implemented yet.")
