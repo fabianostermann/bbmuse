@@ -42,10 +42,13 @@ def process_args():
     sub_status = subparsers.add_parser("status", help='TODO write help', parents=[common])
     sub_status.add_argument('modules', nargs='*', help="Path or name of modules. If none is given, prints a summary of all modules.")
     
-    sub_collect = subparsers.add_parser("collect", help='Starts bbmuse and collects data of armed modules.', parents=[common])
+    sub_listen = subparsers.add_parser("listen", help='Starts bbmuse and collects data of armed modules.', parents=[common])
     
-    sub_train = subparsers.add_parser("train", help='Train a specific module based on previously collected data.', parents=[common])
-    sub_train.add_argument('module', nargs=1, help="Path or name of a module")
+    sub_clone = subparsers.add_parser("clone", help='Train a model to mimic a specific module based on previously collected data.', parents=[common])
+    sub_clone.add_argument('module', nargs=1, help="Path or name of a module")
+
+    sub_sculpt = subparsers.add_parser("sculpt", help='Refine a trained model based on heuristic constraints and human feedback.', parents=[common])
+    #sub_sculpt.add_argument('module', nargs=1, help="Path or name of a module")
     
     sub_apply = subparsers.add_parser("apply", help='TODO write help', parents=[common])
     sub_apply.add_argument('module', nargs=1, help="Path or name of a module")

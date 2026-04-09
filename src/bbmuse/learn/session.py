@@ -29,7 +29,7 @@ class Session():
             command_method = getattr(self, args.command)
             command_method(args)
         else:
-            logger.error("Method for command '%s()' is not implemented yet.", args.command)
+            logger.error("Command '%s()' is unknown.", args.command)
 
         #print(project.get_module_handlers())
         #print(project.get_representation_handlers())
@@ -132,11 +132,14 @@ class Session():
         is_armed = self.is_armed(mh)
         logger.info("%s %s", mh, "is armed." if is_armed else "is not armed.")
 
-    def collect(self, args):
-        logger.error("collect() is not implemented yet.")
+    def listen(self, args):
+        logger.error("listen() is not implemented yet.")
 
-    def train(self, args):
-        logger.error("train() is not implemented yet.")
+    def clone(self, args):
+        logger.error("clone() is not implemented yet.")
+
+    def sculpt(self, args):
+        logger.error("sculpt() is not implemented yet.")
 
     def apply(self, args):
         logger.error("apply() is not implemented yet.")
