@@ -110,9 +110,8 @@ class Session():
     def status(self, args):
         modules = args.modules
         if len(modules) == 0:
-            # TODO: Run status on all modules and provide compact overview
-            logger.info("Global status mode not implemented yet.")
-            sys.exit(0)
+            for mh in self.project.get_module_handlers():
+                self.print_module_info(mh.get_name())
         else:
             for mod in modules:
                 self.print_module_info(mod)
