@@ -140,4 +140,4 @@ class ModuleHandler(BaseHandler):
                 round(self.timing_stats["max"], 3),
             )
         else:
-            logger.info("No timing statistics available for %s.", mod_handler.get_name())
+            logger.info("No timing statistics available for %s.", self.get_name())
