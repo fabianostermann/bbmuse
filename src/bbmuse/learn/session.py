@@ -12,7 +12,7 @@ class Session():
 
         try:
             requested_log_level = logging.getLogger().level
-            logger.debug("If on INFO log level, increase level to ERROR+1 to suppress bbmuse project loading output.")
+            logger.debug("If on INFO log level, increase level to ERROR to suppress bbmuse project loading output.")
             if logging.getLogger().level == logging.INFO:
                 logging.getLogger().setLevel(logging.ERROR)
             project.build_all()
@@ -108,13 +108,14 @@ class Session():
         self.arm(args, disarm=True)
 
     def status(self, args):
-        module = args.module
-        if module is None:
+        modules = args.modules
+        if len(modules) == 0:
             # TODO: Run status on all modules and provide compact overview
             logger.info("Global status mode not implemented yet.")
             sys.exit(0)
         else:
-            self.print_module_info(module)
+            for mod in modules:
+                self.print_module_info(mod)
 
     def print_module_info(self, module):
         # collect info
@@ -130,7 +131,7 @@ class Session():
             return
         
         is_armed = self.is_armed(mh)
-        logger.info("%s %s", mh, "is armed." if is_armed else "is disarmed.")
+        logger.info("%s %s", mh, "is armed." if is_armed else "is not armed.")
 
     def collect(self, args):
         logger.error("collect() is not implemented yet.")

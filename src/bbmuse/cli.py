@@ -7,7 +7,7 @@ from bbmuse import __version__ as prog_version
 from bbmuse.engine.project import BbMuseProject
 from bbmuse.util.visualization import plot_dependency_graph
 
-logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.INFO)
+logging.basicConfig(format="%(levelname)s\t%(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def main():
@@ -84,6 +84,7 @@ def process_args():
 
     if args.verbose or args.mode < 0:
         logging.getLogger().setLevel(logging.DEBUG)
+        logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.DEBUG, force=True)
     if args.quiet:
         logging.getLogger().setLevel(logging.WARNING)
     if args.silent:

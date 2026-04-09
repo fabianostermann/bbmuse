@@ -7,7 +7,7 @@ from bbmuse import __version__ as prog_version
 from bbmuse.engine.project import BbMuseProject
 from bbmuse.learn.session import Session
 
-logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.INFO)
+logging.basicConfig(format="%(levelname)s\t%(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def main():
@@ -40,7 +40,7 @@ def process_args():
     sub_disable.add_argument('modules', nargs="*", help="Path or name of modules")
     
     sub_status = subparsers.add_parser("status", help='TODO write help', parents=[common])
-    sub_status.add_argument('module', nargs='?', help="Path or name of a module. If none is given, prints a summary of all modules.")
+    sub_status.add_argument('modules', nargs='*', help="Path or name of modules. If none is given, prints a summary of all modules.")
     
     sub_collect = subparsers.add_parser("collect", help='Starts bbmuse and collects data of armed modules.', parents=[common])
     
@@ -59,6 +59,7 @@ def process_args():
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+        logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.DEBUG, force=True)
     if args.quiet:
         logging.getLogger().setLevel(logging.WARNING)
     if args.silent:
