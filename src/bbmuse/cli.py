@@ -64,8 +64,7 @@ def process_args():
     parser.add_argument("--mode", default="NORMAL", type=str.upper, choices=['DEBUG', 'NORMAL', 'PERFORM'])
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Show debug messages.")
-    parser.add_argument("-q", "--quiet", action="store_true", help="Show warning and error messages. Overwrites --verbose.")
-    parser.add_argument("--silent", action="store_true", help="Show no messages. Overwrites --quiet and --verbose")
+    parser.add_argument("--silent", action="store_true", help="Show no messages. Overwrites --verbose")
 
     parser.add_argument("--verify-build", action="store_true", help="Verify if project can be build without errors and creates a plot of the dependency graph. Will not run afterwards.")
     parser.add_argument("--quit-after", type=int, default=-1, help="Quit after the given time in seconds.")
@@ -85,11 +84,10 @@ def process_args():
     if args.verbose or args.mode < 0:
         logging.getLogger().setLevel(logging.DEBUG)
         logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.DEBUG, force=True)
-    if args.quiet:
-        logging.getLogger().setLevel(logging.WARNING)
     if args.silent:
         logging.getLogger().setLevel(logging.CRITICAL+1)
         sys.stdout = None
+        sys.stderr = None
 
     logger.debug("Args: %s", args)
 

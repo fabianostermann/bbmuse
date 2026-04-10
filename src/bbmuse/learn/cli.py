@@ -24,8 +24,7 @@ def main():
 def process_args():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("-v", "--verbose", action="store_true", help="Show debug messages.")
-    common.add_argument("-q", "--quiet", action="store_true", help="Show warning and error messages. Overwrites --verbose.")
-    common.add_argument("--silent", action="store_true", help="Show no messages. Overwrites --quiet and --verbose")
+    common.add_argument("--silent", action="store_true", help="Show no messages. Overwrites --verbose")
     
     parser = argparse.ArgumentParser(prog="bblearn", description="Learning features for bbmuse", parents=[common])
     
@@ -63,11 +62,10 @@ def process_args():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
         logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.DEBUG, force=True)
-    if args.quiet:
-        logging.getLogger().setLevel(logging.WARNING)
     if args.silent:
         logging.getLogger().setLevel(logging.CRITICAL+1)
         sys.stdout = None
+        sys.stderr = None
 
     logger.debug("Args: %s", args)
     
