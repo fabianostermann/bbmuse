@@ -4,6 +4,7 @@ from collections import defaultdict, deque
 from time import time
 
 import threading
+GLOBAL_UPDATE_LOCK = threading.Lock()
 
 base_logger = logging.getLogger(__name__)
 
@@ -63,12 +64,13 @@ class ControlGroup:
                     #self.logger.debug("Call _update() on module %s", mod_handler)
 
                     try:
-                        if self.run_mode <= 0: # DEVELOP or DEBUG mode
+                        if self.run_mode <= 0: # DEBUG or NORMAL mode
                             for rep_name in mod_handler.get_requires():
                                 self.blackboard.get(rep_name).consider_hot_reload()
                     
                         if self._running and mod_handler.is_active():
-                            mod_handler.call_update(self.blackboard_views[mod_handler])
+                            with GLOBAL_UPDATE_LOCK:
+                                mod_handler.call_update(self.blackboard_views[mod_handler])
                                 
                         if self.run_mode < 0: # DEBUG mode
                             try:

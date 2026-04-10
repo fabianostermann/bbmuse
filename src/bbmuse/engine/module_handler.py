@@ -6,9 +6,6 @@ import inspect
 
 from time import perf_counter
 
-import threading
-GLOBAL_UPDATE_LOCK = threading.Lock()
-
 from bbmuse.engine.base_handler import BaseHandler
 
 logger = logging.getLogger(__name__)
@@ -66,21 +63,20 @@ class ModuleHandler(BaseHandler):
     #    return f"<Module:{self.get_name()}>"
 
     """ Mandatory attributes """
-    def call_update(self, bb):
-        # TODO make atomic updates an option
-        with GLOBAL_UPDATE_LOCK:        
-            # TODO: Hot-reload only in mode DEVELOP and DEBUG, not in PERFORM!
-            self.consider_hot_reload()
-            
-            self._is_running = True
-            try:
-                start_time = perf_counter()
-                self.get_component()._update(bb)
+    def call_update(self, bb):   
+        logger.debug("Running call_update() on module %s", self)
+        # TODO: Hot-reload only in mode DEVELOP and DEBUG, not in PERFORM!
+        self.consider_hot_reload()
+        
+        self._is_running = True
+        try:
+            start_time = perf_counter()
+            self.get_component()._update(bb)
 
-                delta_secs = perf_counter() - start_time
-                self._update_timing_stats(delta_secs)
-            finally:
-                self._is_running = False
+            delta_secs = perf_counter() - start_time
+            self._update_timing_stats(delta_secs)
+        finally:
+            self._is_running = False
 
     def is_running(self):
         return self._is_running
