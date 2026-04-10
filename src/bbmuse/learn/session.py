@@ -13,18 +13,11 @@ class Session():
     def __init__(self, project, args):
         logger.debug(args)
 
-        # build project to setup modules, blackboard and dependency graph
-        try:
-            requested_log_level = logging.getLogger().level
-            logger.debug("If on INFO log level, increase level to ERROR to suppress bbmuse project loading output.")
-            if logging.getLogger().level == logging.INFO:
-                logging.getLogger().setLevel(logging.ERROR)
+        try: # build project to setup modules, blackboard and dependency graph
             project.build_all()
         except Exception:
             logger.exception("Building project failed.")
             sys.exit(1)
-        finally:
-            logging.getLogger().setLevel(requested_log_level)
 
         self.project = project
         self.module_manager = ModuleManager(project)
