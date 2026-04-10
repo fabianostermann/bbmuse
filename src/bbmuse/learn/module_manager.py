@@ -13,11 +13,10 @@ class ModuleManager():
 
     def prepare_working_dir(self):
         self._working_dir = Path(self.project.config["path"]["bblearn"])
-        if not self._working_dir.exists():
-            self._working_dir.mkdir()
+        self._working_dir.mkdir(parents=True, exist_ok=True)
+        
         self._modules_dir = Path(self._working_dir, "modules/")
-        if not self._modules_dir.exists():
-            self._modules_dir.mkdir()
+        self._modules_dir.mkdir(parents=True, exist_ok=True)
 
     def disarm(self, args):
         self.arm(args, disarm=True)
@@ -61,6 +60,19 @@ class ModuleManager():
     def get_module_dir(self, module_handler):
         assert not module_handler is None, "Argument should be a valid ModuleHandler object"
         return self._modules_dir / module_handler.get_name().lower()
+
+    def get_next_episode_path(self, module_handler):
+        episodes_dir = self.get_module_dir(module_handler) / "episodes"
+        episodes_dir.mkdir(parents=True, exist_ok=True)
+        
+        existing = sorted(episodes_dir.glob("ep_*.npz"))
+        if existing:
+            last_number = int(existing[-1].stem.split("_")[1])
+            next_number = last_number + 1
+        else:
+            next_number = 1
+    
+        return episodes_dir / f"ep_{next_number:03d}.npz"
 
     def is_armed(self, module_handler):
         mod_dir = self.get_module_dir(module_handler)

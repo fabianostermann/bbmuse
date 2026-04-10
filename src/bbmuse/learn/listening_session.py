@@ -2,8 +2,11 @@ import logging
 import sys, os
 
 from pathlib import Path
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+from bbmuse.learn.module_handler_listener import ModuleHandlerListener
 
 class ListeningSession:
     def __init__(self, project, module_manager):
@@ -11,9 +14,21 @@ class ListeningSession:
         self.module_manager = module_manager
 
     def run(self, args):
+        listeners = []
+
         for mh in self.project.get_module_handlers():
             if self.module_manager.is_armed(mh):
-                # wrap mh with ListeningModuleHandler
-                logger.info("%s is ready to be listened to.", mh)
+                listener = ModuleHandlerListener(mh, self.project.get_blackboard())
+                listeners.append(listener)
+                listener.activate_listen()
+
+        self.project.run(run_mode=0)
+
+        if listener in listeners:
+            ep_path = self.module_manager.get_next_episode_path(listener.get_module_handler())
+
+            rep_arrays = listener.flush()
+            if rep_arrays:
+                np.savez_compressed(ep_path, **rep_arrays)
             else:
-                logger.info("%s will not be listened to.", mh)
+                logger.warning("Rep_array was empty. Nothing to write to disk.")
