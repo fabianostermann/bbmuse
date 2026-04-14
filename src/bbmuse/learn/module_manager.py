@@ -49,7 +49,7 @@ class ModuleManager():
                     continue
                 else: # arm
                     mod_dir.mkdir()
-            armed_indicator = mod_dir / ".armed" # TODO write this to a config toml file
+            armed_indicator = mod_dir / "_armed" # TODO write this to a config toml file
             if disarm:
                 armed_indicator.unlink(missing_ok=True)
                 logger.info("Module %s disarmed.", mod)
@@ -76,7 +76,7 @@ class ModuleManager():
 
     def is_armed(self, module_handler):
         mod_dir = self.get_module_dir(module_handler)
-        return (mod_dir / ".armed").exists()
+        return (mod_dir / "_armed").exists()
 
     def identify_module(self, mod):
         """

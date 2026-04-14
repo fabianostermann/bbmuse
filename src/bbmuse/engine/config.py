@@ -18,7 +18,7 @@ class Config(dict):
                 "path": {
                     "modules": [ "modules/" ],
                     "representations": [ "representations/" ],
-                    "bblearn": "bblearn/",
+                    "bblearn": ".bblearn/",
                 },
             }
         )
