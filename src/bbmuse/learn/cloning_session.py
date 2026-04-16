@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from typing import Dict
 
 logger = logging.getLogger(__name__)
@@ -29,15 +30,15 @@ class CloningSession:
         # load packed representations from recorded episodes
         ep_paths = self.module_manager.get_available_episode_paths(module_handler)
         ep_path = ep_paths[-1] # just last episode for now
-        episode = load_episode(ep_path)
+        episode = self.load_episode(ep_path)
 
         # check if episode matches the given module handler
         assert module_handler.get_requires() == list(episode["requires"].keys()),\
-            f"Requires in module handler and episode does not match, got: {module_handler.get_requires()} and {list(episode["requires"].keys())}"
+            f"Requires in module handler and loaded episode does not match, got: {module_handler.get_requires()} and {list(episode["requires"].keys())}"
         assert module_handler.get_uses() == list(episode["uses"].keys()),\
-            f"Uses in module handler and episode does not match, got: {module_handler.get_uses()} and {list(episode["uses"].keys())}"
+            f"Uses in module handler and loaded episode does not match, got: {module_handler.get_uses()} and {list(episode["uses"].keys())}"
         assert module_handler.get_provides() == list(episode["provides"].keys()),\
-            f"Provides in module handler and episode does not match, got: {module_handler.get_provides()} and {list(episode["provides"].keys())}"
+            f"Provides in module handler and loaded episode does not match, got: {module_handler.get_provides()} and {list(episode["provides"].keys())}"
 
         logger.debug("Loaded episode from: %s", ep_path)
         shapes = {
@@ -45,29 +46,72 @@ class CloningSession:
             for group_name, group in episode.items()
         }
         logger.debug("Shapes are: %s", shapes)
-        # TODO: assert num of timesteps are equal
+        assert len({
+            arr.shape[0]
+            for group in episode.values()
+            for arr in group.values()
+        }) == 1, "Inconsistent timestep counts across episode arrays"
 
-        # TODO: init network that will be used for behavior cloning
-        #ModuleClone(input_dims, output_dims) # determine input_dims and output_dims from shapes (expected form: Dict[str, int])
+        # init network that will be used for behavior cloning
+        input_dims_dict = {k: v[1:] for k, v in (shapes["uses"] | shapes["requires"]).items()}
+        output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
+        clone_net = ModuleClone(input_dims_dict, output_dims_dict)
 
-        # TODO: run training (TODO: allow use of a config file for hyperparameters)
+        # run training (TODO: allow use of a config file for hyperparameters)
+        self.train(clone_net, episode)
 
-def load_episode(ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
-    grouped = {
-        "requires": {},
-        "uses": {},
-        "provides": {},
-    }
+    def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
+        episode = {
+            "requires": {},
+            "uses": {},
+            "provides": {},
+        }
 
-    with np.load(ep_path) as data:
-        for key in data.files:
-            if key.startswith("requires__"):
-                grouped["requires"][key[len("requires__"):]] = data[key]
-            elif key.startswith("uses__"):
-                grouped["uses"][key[len("uses__"):]] = data[key]
-            elif key.startswith("provides__"):
-                grouped["provides"][key[len("provides__"):]] = data[key]
-            else:
-                raise ValueError(f"Unexpected key in episode archive: {key}")
+        with np.load(ep_path) as data:
+            for key in data.files:
+                if key.startswith("requires__"):
+                    episode["requires"][key[len("requires__"):]] = data[key]
+                elif key.startswith("uses__"):
+                    episode["uses"][key[len("uses__"):]] = data[key]
+                elif key.startswith("provides__"):
+                    episode["provides"][key[len("provides__"):]] = data[key]
+                else:
+                    raise ValueError(f"Unexpected key in episode archive: {key}")
 
-    return grouped
+        return episode
+
+    def train(self,
+        net: torch.nn.Module,
+        episode: Dict[str, Dict[str, object]],
+        epochs: int = 100,
+        lr: float = 1e-3,
+    ) -> None:
+        net.train()
+
+        optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+
+        input_arrays = episode["uses"] | episode["requires"]
+        target_arrays = episode["provides"]
+
+        inputs = {
+            name: torch.as_tensor(arr, dtype=torch.float32)
+            for name, arr in input_arrays.items()
+        }
+        targets = {
+            name: torch.as_tensor(arr, dtype=torch.float32)
+            for name, arr in target_arrays.items()
+        }
+
+        for epoch in range(epochs):
+            optimizer.zero_grad()
+
+            preds = net(inputs)
+
+            loss = 0.0
+            for name, target in targets.items():
+                loss = loss + F.mse_loss(preds[name], target)
+
+            loss.backward()
+            optimizer.step()
+
+            logger.info(f"epoch={epoch:04d} loss={loss.item():.6f}")
