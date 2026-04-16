@@ -1,5 +1,6 @@
 # Project specific ignores
 projects/
+.bblearn/
 *.log
 *.png
 *.pdf
