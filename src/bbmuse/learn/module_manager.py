@@ -63,6 +63,11 @@ class ModuleManager():
         assert not module_handler is None, "Argument should be a valid ModuleHandler object"
         return self._modules_dir / module_handler.get_name().lower()
 
+    def get_episodes_dir(self, module_handler):
+        episodes_dir = self.get_module_dir(module_handler) / "episodes"
+        episodes_dir.mkdir(parents=True, exist_ok=True)
+        return episodes_dir
+
     def get_next_episode_path(self, module_handler):
         existing = self.get_available_episode_paths(module_handler)
         if existing:
@@ -71,11 +76,10 @@ class ModuleManager():
         else:
             next_number = 1
     
-        return episodes_dir / f"ep_{next_number:03d}.npz"
+        return self.get_episodes_dir(module_handler) / f"ep_{next_number:03d}.npz"
 
     def get_available_episode_paths(self, module_handler):
-        episodes_dir = self.get_module_dir(module_handler) / "episodes"
-        episodes_dir.mkdir(parents=True, exist_ok=True)
+        episodes_dir = self.get_episodes_dir(module_handler)
         return sorted(episodes_dir.glob("ep_*.npz"))
 
     def is_armed(self, module_handler):
