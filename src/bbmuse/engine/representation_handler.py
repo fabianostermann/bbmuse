@@ -54,3 +54,8 @@ class _RepresentationView():
     def __delattr__(self, name):
         raise AttributeError(f"Deleting attribute '{name}' from {self._representation.__name__} is not allowed.")
     
+    def __repr__(self):
+        return self.__str__()
+    
+    def __str__(self):
+        return f"RepresentationView(name={self._representation.__name__},read_only={self._allowed == set()})"
