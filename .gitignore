@@ -4,6 +4,9 @@ projects/
 *.png
 *.pdf
 
+# ignore notes and todo list
+notes_and_todos
+
 ## Python.gitignore: https://github.com/github/gitignore/blob/main/Python.gitignore
 # Byte-compiled / optimized / DLL files
 __pycache__/
