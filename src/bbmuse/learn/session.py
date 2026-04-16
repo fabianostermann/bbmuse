@@ -6,7 +6,6 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from bbmuse.learn.module_manager import ModuleManager
-from bbmuse.learn.listening_session import ListeningSession
 
 class Session():
 
@@ -38,11 +37,16 @@ class Session():
         self.module_manager.status(args)
 
     def listen(self, args):
+        logger.debug("Starting ListeningSession..")
+        from bbmuse.learn.listening_session import ListeningSession
         ls = ListeningSession(self.project, self.module_manager)
         ls.run(args)
 
     def clone(self, args):
-        logger.error("clone() is not implemented yet.")
+        logger.debug("Starting CloningSession..")
+        from bbmuse.learn.cloning_session import CloningSession
+        cs = CloningSession(self.project, self.module_manager)
+        cs.run(args)
 
     def sculpt(self, args):
         logger.error("sculpt() is not implemented yet.")
