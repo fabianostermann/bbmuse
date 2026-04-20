@@ -3,6 +3,8 @@ import sys, os
 
 from pathlib import Path
 
+from tqdm import tqdm
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -40,7 +42,7 @@ class CloningSession:
         assert module_handler.get_provides() == list(episode["provides"].keys()),\
             f"Provides in module handler and loaded episode does not match, got: {module_handler.get_provides()} and {list(episode["provides"].keys())}"
 
-        logger.debug("Loaded episode from: %s", ep_path)
+        logger.info("Loaded episode from: %s", ep_path)
         shapes = {
             group_name: { rep_name: arr.shape for rep_name, arr in group.items() }
             for group_name, group in episode.items()
@@ -102,16 +104,19 @@ class CloningSession:
             for name, arr in target_arrays.items()
         }
 
-        for epoch in range(epochs):
-            optimizer.zero_grad()
+        logger.info("Starting training for %s epochs.", epochs)
+        
+        with tqdm(range(epochs)) as pbar:
+            for epoch in pbar:
+                optimizer.zero_grad()
 
-            preds = net(inputs)
+                preds = net(inputs)
 
-            loss = 0.0
-            for name, target in targets.items():
-                loss = loss + F.mse_loss(preds[name], target)
+                loss = 0.0
+                for name, target in targets.items():
+                    loss = loss + F.mse_loss(preds[name], target)
 
-            loss.backward()
-            optimizer.step()
+                loss.backward()
+                optimizer.step()
 
-            logger.info(f"epoch={epoch:04d} loss={loss.item():.6f}")
+                pbar.set_description(f"epoch={epoch:04d} loss={loss.item():.6f}")
