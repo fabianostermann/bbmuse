@@ -15,4 +15,4 @@ def _unpack(arr: np.ndarray):
     valueB = float(arr[1])
 
 def _loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    return F.mse_loss(pred, target)
+    return 10000 # F.mse_loss(pred, target)
