@@ -21,6 +21,8 @@ class CloningSession:
         self.blackboard = self.project.get_blackboard()
         self.module_manager = module_manager
 
+        self.fallback_loss_function = F.mse_loss
+
         # TODO: load backbone library from py file (.bblearn/backbones/)
 
     def run(self, args):
@@ -59,8 +61,10 @@ class CloningSession:
         output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
         clone_net = ModuleClone(input_dims_dict, output_dims_dict)
 
+        loss_functions = self.load_loss_functions(module_handler)
+
         # run training (TODO: allow use of a config file for hyperparameters)
-        self.train(clone_net, episode)
+        self.train(clone_net, episode, loss_functions)
 
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
@@ -82,9 +86,25 @@ class CloningSession:
 
         return episode
 
+    def load_loss_functions(self, mod_handler):
+        logger.info("Load loss functions for target representations of module %s", mod_handler)
+        loss_functions = {}
+        for provided_rep_name in mod_handler.get_provides():
+            rh = self.blackboard.get(provided_rep_name)
+            loss_candidate = getattr(rh.get_component(), "_loss", None)
+            if loss_candidate and callable(loss_candidate):
+                logger.debug("Found custom loss function for %s.", rh)
+                loss_functions[provided_rep_name] = loss_candidate
+            else:
+                logger.debug("No custom loss function found for %s. Using fallback (%s)", rh, self.fallback_loss_function)
+                loss_functions[provided_rep_name] = self.fallback_loss_function
+
+        return loss_functions
+
     def train(self,
         net: torch.nn.Module,
         episode: Dict[str, Dict[str, object]],
+        loss_functions: Dict[str, callable],
         epochs: int = 100,
         lr: float = 1e-3,
     ) -> None:
@@ -114,7 +134,7 @@ class CloningSession:
 
                 loss = 0.0
                 for name, target in targets.items():
-                    loss = loss + F.mse_loss(preds[name], target)
+                    loss = loss + loss_functions[name](preds[name], target)
 
                 loss.backward()
                 optimizer.step()
