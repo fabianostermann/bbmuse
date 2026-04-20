@@ -110,6 +110,7 @@ class ModuleManager():
         else:
             for mod in modules:
                 self.print_module_info(mod)
+                # TODO print more details about episodes, clones, etc.
 
     def print_module_info(self, module):
         # collect info

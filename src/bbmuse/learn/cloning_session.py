@@ -140,3 +140,5 @@ class CloningSession:
                 optimizer.step()
 
                 pbar.set_description(f"epoch={epoch:04d} loss={loss.item():.6f}")
+
+        # TODO: save trained model to file
