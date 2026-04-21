@@ -40,9 +40,10 @@ class Config(dict):
         self._project_dir = project_dir
         logger.debug("Project lives here: %s", self.get_project_dir())
         
-        error_logfile = project_dir.joinpath("error.log")
-        self.setup_error_logging(error_logfile)
-        logger.debug("Error log file: %s", error_logfile)
+        # Error log file disabled: TODO: make this a parameter (--log-to-file)
+        #error_logfile = project_dir.joinpath("error.log")
+        #self.setup_error_logging(error_logfile)
+        #logger.debug("Error log file: %s", error_logfile)
     
     def get_project_dir(self):
         return Path(self._project_dir).absolute()
