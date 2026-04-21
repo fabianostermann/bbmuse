@@ -109,7 +109,7 @@ class DefaultBackbone(nn.Module):
        
         hidden_dim = 64
         self.net = nn.Sequential(
-            nn.LazyLinear(hidden_dim),
+            nn.Linear(in_dim, hidden_dim) if in_dim else nn.LazyLinear(hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
