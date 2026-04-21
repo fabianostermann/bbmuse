@@ -16,8 +16,14 @@ class ModuleClone(nn.Module):
         self,
         input_dims: Dict[str, Tuple[int, ...]],
         output_dims: Dict[str, Tuple[int, ...]],
+        path_to_backbone: str = None,
     ):
         super().__init__()
+        self.config = {
+            "input_dims": input_dims,
+            "output_dims": output_dims,
+            "path_to_backbone": path_to_backbone,
+        }
 
         # init input encoders
         self.input_encoders = nn.ModuleDict({
@@ -35,7 +41,11 @@ class ModuleClone(nn.Module):
         logger.debug("backbone input dimensions are: %s", fused_dim)
 
         # init backbone
-        self.backbone = DefaultBackbone(fused_dim)
+        if path_to_backbone:
+            self.backbone = BackboneWrapper(path_to_backbone, fused_dim)
+        else:
+            self.backbone = DefaultBackbone(fused_dim)
+
 
         # infer backbone output dim
         with torch.no_grad():
@@ -117,3 +127,15 @@ class DefaultBackbone(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
+
+class BackboneWrapper(nn.Module):
+
+    def __init__(self, path_to_backbone: str | Path, in_dim: int):
+        self.path = Path(path_to_backbone)
+        self.name = self.path.stem
+
+        self.backbone = None # TODO: dynamic load backbone from file, then instantiate and validate
+        raise NotImplementedError("Not further implemented yet.")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.backbone(x)

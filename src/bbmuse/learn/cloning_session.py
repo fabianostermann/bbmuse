@@ -14,6 +14,7 @@ from typing import Dict
 logger = logging.getLogger(__name__)
 
 from bbmuse.learn.module_clone import ModuleClone
+from bbmuse.learn.checkpoint import Checkpoint
 
 class CloningSession:
     def __init__(self, project, module_manager):
@@ -23,26 +24,24 @@ class CloningSession:
 
         self.fallback_loss_function = F.mse_loss
 
-        # TODO: load backbone library from py file (.bblearn/backbones/)
-
     def run(self, args):
-        module_handler = self.module_manager.identify_module(args.module[0])
-        if not module_handler:
+        self.module_handler = self.module_manager.identify_module(args.module[0])
+        if not self.module_handler:
             logger.error("Module handler not found: %s", args.module[0])
             sys.exit(1)
 
         # load packed representations from recorded episodes
-        ep_paths = self.module_manager.get_available_episode_paths(module_handler)
-        ep_path = ep_paths[-1] # just last episode for now
+        ep_paths = self.module_manager.get_available_episode_paths(self.module_handler)
+        ep_path = ep_paths[-1] # TODO: load all episodes, just loading last episode for now
         episode = self.load_episode(ep_path)
 
         # check if episode matches the given module handler
-        assert module_handler.get_requires() == list(episode["requires"].keys()),\
-            f"Requires in module handler and loaded episode does not match, got: {module_handler.get_requires()} and {list(episode["requires"].keys())}"
-        assert module_handler.get_uses() == list(episode["uses"].keys()),\
-            f"Uses in module handler and loaded episode does not match, got: {module_handler.get_uses()} and {list(episode["uses"].keys())}"
-        assert module_handler.get_provides() == list(episode["provides"].keys()),\
-            f"Provides in module handler and loaded episode does not match, got: {module_handler.get_provides()} and {list(episode["provides"].keys())}"
+        assert self.module_handler.get_requires() == list(episode["requires"].keys()),\
+            f"Requires in module handler and loaded episode does not match, got: {self.module_handler.get_requires()} and {list(episode["requires"].keys())}"
+        assert self.module_handler.get_uses() == list(episode["uses"].keys()),\
+            f"Uses in module handler and loaded episode does not match, got: {self.module_handler.get_uses()} and {list(episode["uses"].keys())}"
+        assert self.module_handler.get_provides() == list(episode["provides"].keys()),\
+            f"Provides in module handler and loaded episode does not match, got: {self.module_handler.get_provides()} and {list(episode["provides"].keys())}"
 
         logger.info("Loaded episode from: %s", ep_path)
         shapes = {
@@ -59,12 +58,13 @@ class CloningSession:
         # init network that will be used for behavior cloning
         input_dims_dict = {k: v[1:] for k, v in (shapes["uses"] | shapes["requires"]).items()}
         output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
-        clone_net = ModuleClone(input_dims_dict, output_dims_dict)
+        path_to_backbone = self.get_path_to_backbone(args.backbone)
+        clone_model = ModuleClone(input_dims_dict, output_dims_dict, path_to_backbone)
 
-        loss_functions = self.load_loss_functions(module_handler)
+        loss_functions = self.load_loss_functions(self.module_handler)
 
         # run training (TODO: allow use of a config file for hyperparameters)
-        self.train(clone_net, episode, loss_functions)
+        self.train(clone_model, episode, loss_functions)
 
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
@@ -86,6 +86,16 @@ class CloningSession:
 
         return episode
 
+    def get_path_to_backbone(self, backbone_name: str | None):
+        if backbone_name is None: 
+            return None
+        ptb = self.module_manager.get_backbones_dir() / (backbone_name+".py")
+        if ptb.exists() and ptb.is_file():
+            logger.debug("Found backbone file: %s", ptb)
+            return ptb
+        else:
+            raise FileNotFoundError(f"Backbone file not found: {ptb}")
+
     def load_loss_functions(self, mod_handler):
         logger.info("Load loss functions for target representations of module %s", mod_handler)
         loss_functions = {}
@@ -102,15 +112,18 @@ class CloningSession:
         return loss_functions
 
     def train(self,
-        net: torch.nn.Module,
+        clone_model: torch.nn.Module,
         episode: Dict[str, Dict[str, object]],
         loss_functions: Dict[str, callable],
         epochs: int = 100,
         lr: float = 1e-3,
     ) -> None:
-        net.train()
+        
+        # init run & checkpoint directory
+        curr_run_dir = self.module_manager.create_next_clone_run_dir(self.module_handler)
 
-        optimizer = torch.optim.Adam(net.parameters(), lr=lr)
+        clone_model.train()
+        optimizer = torch.optim.Adam(clone_model.parameters(), lr=lr)
 
         input_arrays = episode["uses"] | episode["requires"]
         target_arrays = episode["provides"]
@@ -125,14 +138,18 @@ class CloningSession:
         }
 
         logger.info("Starting training for %s epochs.", epochs)
-        
-        with tqdm(range(epochs)) as pbar:
+        with tqdm(range(1,epochs+1)) as pbar:
             for epoch in pbar:
                 optimizer.zero_grad()
 
-                preds = net(inputs)
-
+                preds = clone_model(inputs)
                 loss = 0.0
+
+                # TODO: save checkpoints
+                #final_path = self.module_manager.get_final_model_path(curr_run_dir)
+                #pt = Checkpoint(final_path)
+                #pt.save(clone_model, self.module_handler, epoch, loss.item(), optimizer)
+
                 for name, target in targets.items():
                     loss = loss + loss_functions[name](preds[name], target)
 
@@ -141,4 +158,6 @@ class CloningSession:
 
                 pbar.set_description(f"epoch={epoch:04d} loss={loss.item():.6f}")
 
-        # TODO: save trained model to file
+        final_path = self.module_manager.get_final_model_path(curr_run_dir)
+        pt = Checkpoint(final_path)
+        pt.save(clone_model, self.module_handler, epoch, loss.item(), optimizer)

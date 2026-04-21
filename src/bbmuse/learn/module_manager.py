@@ -17,8 +17,14 @@ class ModuleManager():
         
         self._modules_dir = Path(self._working_dir, "modules/")
         self._modules_dir.mkdir(parents=True, exist_ok=True)
+        
+        self._backbones_dir = Path(self._working_dir, "backbones/")
+        self._backbones_dir.mkdir(parents=True, exist_ok=True)
 
         logger.debug("Working dir set to: %s", self._working_dir)
+
+    def get_working_dir(self):
+        return self._working_dir
 
     def disarm(self, args):
         self.arm(args, disarm=True)
@@ -81,6 +87,38 @@ class ModuleManager():
     def get_available_episode_paths(self, module_handler):
         episodes_dir = self.get_episodes_dir(module_handler)
         return sorted(episodes_dir.glob("ep_*.npz"))
+
+    def get_clones_dir(self, module_handler):
+        clones_dir = self.get_module_dir(module_handler) / "clones"
+        clones_dir.mkdir(parents=True, exist_ok=True)
+        return clones_dir
+
+    def create_next_clone_run_dir(self, module_handler):
+        existing = self.get_available_clone_run_dirs(module_handler)
+        if existing:
+            last_number = int(existing[-1].stem.split("_")[1])
+            next_number = last_number + 1
+        else:
+            next_number = 1
+    
+        next_clone_run_dir = self.get_clones_dir(module_handler) / f"run_{next_number:03d}"
+        next_clone_run_dir.mkdir(parents=False, exist_ok=False)
+        return next_clone_run_dir
+
+    def get_available_clone_run_dirs(self, module_handler):
+        clones_dir = self.get_clones_dir(module_handler)
+        return sorted(clones_dir.glob("run_*"))
+
+    def get_checkpoint_path(run_dir: str | Path, epoch: int):
+        checkpoint_dir = Path(run_dir) / "checkpoints"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        return checkpoint_dir / f"epoch_{epoch:04d}.ckpt"
+
+    def get_final_model_path(self, run_dir: str | Path):
+        return Path(run_dir) / "final.pt"
+
+    def get_backbones_dir(self):
+        return self._backbones_dir
 
     def is_armed(self, module_handler):
         mod_dir = self.get_module_dir(module_handler)

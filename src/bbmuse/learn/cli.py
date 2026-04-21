@@ -45,6 +45,7 @@ def process_args():
     
     sub_clone = subparsers.add_parser("clone", help='Train a model to mimic a specific module based on previously collected data.', parents=[common])
     sub_clone.add_argument('module', nargs=1, help="Path or name of a module")
+    sub_clone.add_argument("--backbone", default=None, type=str, help="Path to a backbone py file")
 
     sub_sculpt = subparsers.add_parser("sculpt", help='Refine a trained model based on heuristic constraints and human feedback.', parents=[common])
     #sub_sculpt.add_argument('module', nargs=1, help="Path or name of a module")
