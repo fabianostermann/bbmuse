@@ -109,7 +109,7 @@ class ModuleManager():
         clones_dir = self.get_clones_dir(module_handler)
         return sorted(clones_dir.glob("run_*"))
 
-    def get_checkpoint_path(run_dir: str | Path, epoch: int):
+    def get_checkpoint_path(self, run_dir: str | Path, epoch: int):
         checkpoint_dir = Path(run_dir) / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         return checkpoint_dir / f"epoch_{epoch:04d}.ckpt"

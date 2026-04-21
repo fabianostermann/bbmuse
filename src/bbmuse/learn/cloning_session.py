@@ -138,26 +138,29 @@ class CloningSession:
         }
 
         logger.info("Starting training for %s epochs.", epochs)
-        with tqdm(range(1,epochs+1)) as pbar:
+        with tqdm(range(epochs+1)) as pbar:
             for epoch in pbar:
-                optimizer.zero_grad()
-
-                preds = clone_model(inputs)
                 loss = 0.0
 
-                # TODO: save checkpoints
-                #final_path = self.module_manager.get_final_model_path(curr_run_dir)
-                #pt = Checkpoint(final_path)
-                #pt.save(clone_model, self.module_handler, epoch, loss.item(), optimizer)
+                if epoch > 0:
+                    optimizer.zero_grad()
+                    preds = clone_model(inputs)
 
-                for name, target in targets.items():
-                    loss = loss + loss_functions[name](preds[name], target)
+                    for name, target in targets.items():
+                        loss = loss + loss_functions[name](preds[name], target)
 
-                loss.backward()
-                optimizer.step()
+                    loss.backward()
+                    optimizer.step()
 
-                pbar.set_description(f"epoch={epoch:04d} loss={loss.item():.6f}")
+                    pbar.set_description(f"epoch={epoch:04d} loss={loss:.6f}")
+
+                # save checkpoints every 10 epochs
+                if epoch % 10 == 0:
+                    ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
+                    ckpt = Checkpoint(ckpt_path)
+                    ckpt.save(clone_model, epoch, loss, optimizer)
 
         final_path = self.module_manager.get_final_model_path(curr_run_dir)
         pt = Checkpoint(final_path)
-        pt.save(clone_model, self.module_handler, epoch, loss.item(), optimizer)
+        pt.save(clone_model, epoch, loss, optimizer)
+        

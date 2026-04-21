@@ -17,14 +17,13 @@ class Checkpoint:
         self._model = None
         self._optimizer = None
 
-    def save(self, model: nn.Module, module_handler, epoch: int, loss: float, optimizer: torch.optim.Optimizer = None) -> None:
+    def save(self, model: nn.Module, epoch: int, loss: float, optimizer: torch.optim.Optimizer = None) -> None:
         self._data = {
             "model_class":      model.__class__.__name__,
             "model_config":     model.config,
             "model_state_dict": model.state_dict(),
             "epoch":            epoch,
             "loss":             loss,
-            "bbmuse_module":    module_handler.get_name(),
         }
         if optimizer:
             self._data["optimizer_state_dict"] = optimizer.state_dict()
