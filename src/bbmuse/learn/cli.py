@@ -32,10 +32,10 @@ def process_args():
     
     subparsers = parser.add_subparsers(dest="command")
     
-    sub_enable = subparsers.add_parser("arm", help='Arm modules (arming means to enable recording mode for the specified modules)', parents=[common])
+    sub_enable = subparsers.add_parser("arm", help='TODO: remove this subparser and provide module list as argument to listen', parents=[common])
     sub_enable.add_argument('modules', nargs="*", help="Path or name of modules")
     
-    sub_disable = subparsers.add_parser("disarm", help='Disarm modules (disarming means to disable recording mode for the specified modules)', parents=[common])
+    sub_disable = subparsers.add_parser("disarm", help='TODO: remove this subparser and give module list as argument to listen', parents=[common])
     sub_disable.add_argument('modules', nargs="*", help="Path or name of modules")
     
     sub_status = subparsers.add_parser("status", help='TODO write help', parents=[common])
