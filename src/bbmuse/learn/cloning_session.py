@@ -22,8 +22,6 @@ class CloningSession:
         self.blackboard = self.project.get_blackboard()
         self.module_manager = module_manager
 
-        self.fallback_loss_function = F.mse_loss
-
     def run(self, args):
         self.module_handler = self.module_manager.identify_module(args.module[0])
         if not self.module_handler:
@@ -61,10 +59,8 @@ class CloningSession:
         path_to_backbone = self.get_path_to_backbone(args.backbone)
         clone_model = ModuleClone(input_dims_dict, output_dims_dict, path_to_backbone)
 
-        loss_functions = self.load_loss_functions(self.module_handler)
-
         # run training (TODO: allow use of a config file for hyperparameters)
-        self.train(clone_model, episode, loss_functions)
+        self.train(clone_model, episode)
 
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
@@ -96,7 +92,7 @@ class CloningSession:
         else:
             raise FileNotFoundError(f"Backbone file not found: {ptb}")
 
-    def load_loss_functions(self, mod_handler):
+    def load_loss_functions(self, mod_handler, fallback_loss_function):
         logger.info("Load loss functions for target representations of module %s", mod_handler)
         loss_functions = {}
         for provided_rep_name in mod_handler.get_provides():
@@ -106,21 +102,24 @@ class CloningSession:
                 logger.debug("Found custom loss function for %s.", rh)
                 loss_functions[provided_rep_name] = loss_candidate
             else:
-                logger.debug("No custom loss function found for %s. Using fallback (%s)", rh, self.fallback_loss_function)
-                loss_functions[provided_rep_name] = self.fallback_loss_function
+                logger.debug("No custom loss function found for %s. Will fallback to: %s", rh, fallback_loss_function)
+                loss_functions[provided_rep_name] = fallback_loss_function
 
         return loss_functions
 
     def train(self,
         clone_model: torch.nn.Module,
         episode: Dict[str, Dict[str, object]],
-        loss_functions: Dict[str, callable],
         epochs: int = 100,
         lr: float = 1e-3,
+        fallback_loss_function = F.mse_loss,
+        checkpoint_interval: int = 10,
     ) -> None:
         
         # init run & checkpoint directory
         curr_run_dir = self.module_manager.create_next_clone_run_dir(self.module_handler)
+
+        loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
         clone_model.train()
         optimizer = torch.optim.Adam(clone_model.parameters(), lr=lr)
@@ -152,10 +151,12 @@ class CloningSession:
                     loss.backward()
                     optimizer.step()
 
-                    pbar.set_description(f"epoch={epoch:04d} loss={loss:.6f}")
+                    desc = f"epoch={epoch:04d} loss={loss:.6f}"
+                    pbar.set_description(desc)
+                    logger.debug(desc)
 
-                # save checkpoints every 10 epochs
-                if epoch % 10 == 0:
+                # save checkpoints every 10 epochs (default)
+                if epoch % checkpoint_interval == 0:
                     ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
                     ckpt = Checkpoint(ckpt_path)
                     ckpt.save(clone_model, epoch, loss, optimizer)
