@@ -51,6 +51,10 @@ class Checkpoint:
         return self
 
     def make_model(self):
+        """
+        Rebuild model as nn.Module from state_dict.
+        The model must be of type ModuleClone for this to work.
+        """
         if self._model:
             return self._model
 
@@ -63,6 +67,10 @@ class Checkpoint:
         return model
 
     def make_optimizer(self):
+        """
+        Rebuild Adam optimizer from state_dict.
+        For now, only pure Adam is supported.
+        """
         if self._optimizer:
             return self._optimizer
 
@@ -86,7 +94,3 @@ class Checkpoint:
     def get_loss(self):
         assert self._data, "Checkpoint must be saved or loaded first."
         return self._data["loss"]
-
-    def get_module_name(self):
-        assert self._data, "Checkpoint must be saved or loaded first."
-        return self._data["bbmuse_module"]
