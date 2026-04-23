@@ -50,7 +50,8 @@ def process_args():
     sub_clone.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
 
     sub_sculpt = subparsers.add_parser("sculpt", help='Refine a trained model based on heuristic constraints and human feedback.', parents=[common])
-    #sub_sculpt.add_argument('module', nargs=1, help="Path or name of a module")
+    sub_sculpt.add_argument('module', nargs=1, help="Path or name of a module")
+    sub_sculpt.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
     
     sub_apply = subparsers.add_parser("apply", help='TODO write help', parents=[common])
     sub_apply.add_argument('module', nargs=1, help="Path or name of a module")
