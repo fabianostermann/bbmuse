@@ -17,10 +17,11 @@ from bbmuse.learn.module_clone import ModuleClone
 from bbmuse.learn.checkpoint import Checkpoint
 
 class CloningSession:
-    def __init__(self, project, module_manager):
+    def __init__(self, project, module_manager, device=torch.device("cpu")):
         self.project = project
         self.blackboard = self.project.get_blackboard()
         self.module_manager = module_manager
+        self.device = device
 
     def run(self, args):
         self.module_handler = self.module_manager.identify_module(args.module[0])
@@ -121,6 +122,7 @@ class CloningSession:
 
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
+        clone_model.to(self.device)
         clone_model.train()
         optimizer = torch.optim.Adam(clone_model.parameters(), lr=lr)
 
@@ -128,11 +130,11 @@ class CloningSession:
         target_arrays = episode["provides"]
 
         inputs = {
-            name: torch.as_tensor(arr, dtype=torch.float32)
+            name: torch.as_tensor(arr, dtype=torch.float32, device=self.device)
             for name, arr in input_arrays.items()
         }
         targets = {
-            name: torch.as_tensor(arr, dtype=torch.float32)
+            name: torch.as_tensor(arr, dtype=torch.float32, device=self.device)
             for name, arr in target_arrays.items()
         }
 

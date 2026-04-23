@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 from bbmuse.learn.module_clone import ModuleClone
 
 class Checkpoint:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, device = torch.device("cpu")):
         self.path = Path(path)
+        self.device = device
         self._data = None
         self._model = None
         self._optimizer = None
@@ -47,7 +48,7 @@ class Checkpoint:
             logger.error("Path does not exists: %s", self.path)
             raise FileNotFoundError(path)
 
-        self._data = torch.load(self.path, weights_only=False)
+        self._data = torch.load(self.path, weights_only=False, map_location=self.device)
         return self
 
     def make_model(self):
@@ -63,6 +64,7 @@ class Checkpoint:
 
         model = ModuleClone(**self._data["model_config"])
         model.load_state_dict(self._data["model_state_dict"])
+        model.to_device(self.device)
 
         return model
 

@@ -43,16 +43,44 @@ class Session():
         ls.run(args)
 
     def clone(self, args):
+        device = self.get_desired_torch_device(args.device)
         logger.debug("Starting CloningSession..")
         from bbmuse.learn.cloning_session import CloningSession
-        cs = CloningSession(self.project, self.module_manager)
+        cs = CloningSession(self.project, self.module_manager, device=device)
         cs.run(args)
 
     def sculpt(self, args):
-        logger.error("sculpt() is not implemented yet.")
+        device = self.get_desired_torch_device(args.device)
+        logger.debug("Starting SculptingSession..")
+        from bbmuse.learn.sculpting_session import SculptingSession
+        cs = SculptingSession(self.project, self.module_manager, device=device)
+        cs.run(args)
 
     def apply(self, args):
         logger.error("apply() is not implemented yet.")
 
     def restore(self, args):
         logger.error("restore() is not implemented yet.")
+
+    def get_desired_torch_device(self, device_name):
+        import torch
+
+        # Check if GPU is available
+        logger.debug("CUDA available: %s", torch.cuda.is_available())
+        logger.debug("Current device: %s", torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')
+
+        # Check which device a tensor is on
+        x = torch.tensor([1, 2, 3])
+        logger.debug("Default tensor device: %s", x.device)
+
+        if device_name:
+            # Explicitly move tensors to desired device if provided
+            device = torch.device(device_name)
+        else:
+            # Explicitly move tensors to GPU if available
+            logger.debug("No desired device provided, trying: cuda (fallback: cpu).")
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        x = x.to(device)
+        logger.debug("Tensor device after moving to desired device (%s): %s", device_name, x.device)
+
+        return device
