@@ -5,5 +5,6 @@
 name = "Learn Project"
 description = "Used for debugging the code base of bblearn"
 
-[path]
-bblearn = ".bblearn/"
+[bblearn]
+work = ".bblearn/"
+backbones = "backbones/"
