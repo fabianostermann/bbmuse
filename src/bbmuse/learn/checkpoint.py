@@ -41,6 +41,7 @@ class Checkpoint:
         #        pass  # don't fail the save if source is unreadable
 
         torch.save(self._data, self.path)
+        logger.debug("Checkpoint saved to disk: %s", self.path)
         return self
 
     def load(self):
@@ -49,6 +50,7 @@ class Checkpoint:
             raise FileNotFoundError(path)
 
         self._data = torch.load(self.path, weights_only=False, map_location=self.device)
+        logger.debug("Checkpoint loaded from disk: %s", self.path)
         return self
 
     def make_model(self):
@@ -64,7 +66,7 @@ class Checkpoint:
 
         model = ModuleClone(**self._data["model_config"])
         model.load_state_dict(self._data["model_state_dict"])
-        model.to_device(self.device)
+        model.to(self.device)
 
         return model
 
