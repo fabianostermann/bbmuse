@@ -18,8 +18,11 @@ class Config(dict):
                 "path": {
                     "modules": [ "modules/" ],
                     "representations": [ "representations/" ],
-                    "bblearn": ".bblearn/",
                 },
+                "bblearn": {
+                    "work": ".bblearn/",
+                    "backbones": "backbones/"
+                }
             }
         )
 

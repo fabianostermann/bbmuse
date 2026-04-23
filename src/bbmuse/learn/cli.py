@@ -40,6 +40,7 @@ def process_args():
     
     sub_status = subparsers.add_parser("status", help='TODO write help', parents=[common])
     sub_status.add_argument('modules', nargs='*', help="Path or name of modules. If none is given, prints a summary of all modules.")
+    sub_status.add_argument('-s', "--short", action="store_true", help="Give the output in the short-format.")
     
     sub_listen = subparsers.add_parser("listen", help='Starts bbmuse and collects data of armed modules.', parents=[common])
     

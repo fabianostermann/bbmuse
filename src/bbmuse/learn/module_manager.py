@@ -12,13 +12,13 @@ class ModuleManager():
         self.prepare_working_dir()
 
     def prepare_working_dir(self):
-        self._working_dir = Path(self.project.config["path"]["bblearn"])
+        self._working_dir = Path(self.project.config["bblearn"]["work"])
         self._working_dir.mkdir(parents=True, exist_ok=True)
         
         self._modules_dir = Path(self._working_dir, "modules/")
         self._modules_dir.mkdir(parents=True, exist_ok=True)
         
-        self._backbones_dir = Path(self._working_dir, "backbones/")
+        self._backbones_dir = Path(self.project.config["bblearn"]["backbones"])
         self._backbones_dir.mkdir(parents=True, exist_ok=True)
 
         logger.debug("Working dir set to: %s", self._working_dir)
@@ -109,12 +109,35 @@ class ModuleManager():
         clones_dir = self.get_clones_dir(module_handler)
         return sorted(clones_dir.glob("run_*"))
 
+    def get_sculpts_dir(self, module_handler):
+        sculpts_dir = self.get_module_dir(module_handler) / "sculpts"
+        sculpts_dir.mkdir(parents=True, exist_ok=True)
+        return sculpts_dir
+
+    def create_next_sculpt_run_dir(self, module_handler):
+        existing = self.get_available_sculpt_run_dirs(module_handler)
+        if existing:
+            last_number = int(existing[-1].stem.split("_")[1])
+            next_number = last_number + 1
+        else:
+            next_number = 1
+    
+        next_sculpt_run_dir = self.get_sculpts_dir(module_handler) / f"run_{next_number:03d}"
+        next_sculpt_run_dir.mkdir(parents=False, exist_ok=False)
+        return next_sculpt_run_dir
+
+    def get_available_sculpt_run_dirs(self, module_handler):
+        sculpts_dir = self.get_sculpts_dir(module_handler)
+        return sorted(sculpts_dir.glob("run_*"))
+
     def get_checkpoint_path(self, run_dir: str | Path, epoch: int):
+        """ Intended for use with clones and sculpt directories """
         checkpoint_dir = Path(run_dir) / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         return checkpoint_dir / f"epoch_{epoch:04d}.ckpt"
 
     def get_final_model_path(self, run_dir: str | Path):
+        """ Intended for use with clones and sculpt directories """
         return Path(run_dir) / "final.pt"
 
     def get_backbones_dir(self):
@@ -141,21 +164,19 @@ class ModuleManager():
         return None
 
     def status(self, args):
+        logger.info("───STATUS───")
         modules = args.modules
         if len(modules) == 0:
-            for mh in self.project.get_module_handlers():
-                self.print_module_info(mh.get_name())
-        else:
-            for mod in modules:
-                self.print_module_info(mod)
-                # TODO print more details about episodes, clones, etc.
+            modules = [m.get_name() for m in self.project.get_module_handlers()]
+        for mod_name in modules:
+            self.print_module_info(mod_name, short=args.short)
 
-    def print_module_info(self, module):
+    def print_module_info(self, module_name, short=False):
         # collect info
-        mh = self.identify_module(module)
+        mh = self.identify_module(module_name)
         if mh is None:
             # TODO module is present but skipped in the dependency graph, could run BaseHandler(path) manually here in the future
-            logger.info("Unable to find module: %s (not existing or not in the current dependency graph)", module)
+            logger.info("Unable to find module: %s (not existing or not in the current dependency graph)", module_name)
             return
             
         mod_dir = self.get_module_dir(mh)
@@ -164,4 +185,23 @@ class ModuleManager():
             return
         
         is_armed = self.is_armed(mh)
-        logger.info("%s %s", mh, "is armed." if is_armed else "is not armed.")
+        logger.info("%s %s", mh, "(armed)" if is_armed else "(idle)")
+
+        if not short:
+            avail_episodes_names = [path.stem for path in self.get_available_episode_paths(mh)]
+            if avail_episodes_names:
+                logger.info("├── Episodes (%s): %s", len(avail_episodes_names), ", ".join(avail_episodes_names))
+            else:
+                logger.info("├── No episodes.")
+
+            avail_clones_names = [path.stem for path in self.get_available_clone_run_dirs(mh)]
+            if avail_clones_names:
+                logger.info("├── Clones (%s): %s", len(avail_clones_names), ", ".join(avail_clones_names))
+            else:
+                logger.info("├── No clones.")
+
+            avail_sculpts_names = [path.stem for path in self.get_available_sculpt_run_dirs(mh)]
+            if avail_sculpts_names:
+                logger.info("└── Sculpts (%s): %s", len(avail_sculpts_names), ", ".join(avail_sculpts_names))
+            else:
+                logger.info("└── No sculpts.")
