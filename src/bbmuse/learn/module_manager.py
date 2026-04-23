@@ -70,23 +70,23 @@ class ModuleManager():
         return self._modules_dir / module_handler.get_name().lower()
 
     def get_episodes_dir(self, module_handler):
-        episodes_dir = self.get_module_dir(module_handler) / "episodes"
+        episodes_dir = self.get_module_dir(module_handler) / "records"
         episodes_dir.mkdir(parents=True, exist_ok=True)
         return episodes_dir
 
     def get_next_episode_path(self, module_handler):
         existing = self.get_available_episode_paths(module_handler)
         if existing:
-            last_number = int(existing[-1].stem.split("_")[1])
+            last_number = int(existing[-1].stem)
             next_number = last_number + 1
         else:
             next_number = 1
     
-        return self.get_episodes_dir(module_handler) / f"ep_{next_number:03d}.npz"
+        return self.get_episodes_dir(module_handler) / f"{next_number:03d}.npz"
 
     def get_available_episode_paths(self, module_handler):
         episodes_dir = self.get_episodes_dir(module_handler)
-        return sorted(episodes_dir.glob("ep_*.npz"))
+        return sorted(episodes_dir.glob("*.npz"))
 
     def get_clones_dir(self, module_handler):
         clones_dir = self.get_module_dir(module_handler) / "clones"
@@ -96,18 +96,18 @@ class ModuleManager():
     def create_next_clone_run_dir(self, module_handler):
         existing = self.get_available_clone_run_dirs(module_handler)
         if existing:
-            last_number = int(existing[-1].stem.split("_")[1])
+            last_number = int(existing[-1].stem)
             next_number = last_number + 1
         else:
             next_number = 1
     
-        next_clone_run_dir = self.get_clones_dir(module_handler) / f"run_{next_number:03d}"
+        next_clone_run_dir = self.get_clones_dir(module_handler) / f"{next_number:03d}"
         next_clone_run_dir.mkdir(parents=False, exist_ok=False)
         return next_clone_run_dir
 
     def get_available_clone_run_dirs(self, module_handler):
         clones_dir = self.get_clones_dir(module_handler)
-        return sorted(clones_dir.glob("run_*"))
+        return sorted(clones_dir.glob("*"))
 
     def get_sculpts_dir(self, module_handler):
         sculpts_dir = self.get_module_dir(module_handler) / "sculpts"
@@ -117,18 +117,18 @@ class ModuleManager():
     def create_next_sculpt_run_dir(self, module_handler):
         existing = self.get_available_sculpt_run_dirs(module_handler)
         if existing:
-            last_number = int(existing[-1].stem.split("_")[1])
+            last_number = int(existing[-1].stem)
             next_number = last_number + 1
         else:
             next_number = 1
     
-        next_sculpt_run_dir = self.get_sculpts_dir(module_handler) / f"run_{next_number:03d}"
+        next_sculpt_run_dir = self.get_sculpts_dir(module_handler) / f"{next_number:03d}"
         next_sculpt_run_dir.mkdir(parents=False, exist_ok=False)
         return next_sculpt_run_dir
 
     def get_available_sculpt_run_dirs(self, module_handler):
         sculpts_dir = self.get_sculpts_dir(module_handler)
-        return sorted(sculpts_dir.glob("run_*"))
+        return sorted(sculpts_dir.glob("*"))
 
     def get_checkpoint_path(self, run_dir: str | Path, epoch: int):
         """ Intended for use with clones and sculpt directories """
@@ -185,23 +185,36 @@ class ModuleManager():
             return
         
         is_armed = self.is_armed(mh)
-        logger.info("%s %s", mh, "(armed)" if is_armed else "(idle)")
+        avail_episodes_names = [path.stem for path in self.get_available_episode_paths(mh)]
+        avail_clones_names = [path.stem for path in self.get_available_clone_run_dirs(mh)]
+        avail_sculpts_names = [path.stem for path in self.get_available_sculpt_run_dirs(mh)]
 
-        if not short:
-            avail_episodes_names = [path.stem for path in self.get_available_episode_paths(mh)]
+        if short:
+            short_info = ", ".join([x for x in [
+                "armed" if is_armed else "not armed",
+                str(len(avail_episodes_names))+" records" if len(avail_episodes_names) > 0 else None,
+                str(len(avail_clones_names))+" clones" if len(avail_clones_names) > 0 else None,
+                str(len(avail_sculpts_names))+" sculpts" if len(avail_sculpts_names) > 0 else None,
+            ] if x is not None])
+            logger.info("%s: %s",
+                mh,
+                short_info
+            )
+        else:
+            logger.info("%s %s", mh, "is armed" if is_armed else "is not armed.")
             if avail_episodes_names:
-                logger.info("├── Episodes (%s): %s", len(avail_episodes_names), ", ".join(avail_episodes_names))
+                logger.info("├── %s records: %s", len(avail_episodes_names), ", ".join(avail_episodes_names))
             else:
-                logger.info("├── No episodes.")
+                logger.info("├── no records")
 
-            avail_clones_names = [path.stem for path in self.get_available_clone_run_dirs(mh)]
+            
             if avail_clones_names:
-                logger.info("├── Clones (%s): %s", len(avail_clones_names), ", ".join(avail_clones_names))
+                logger.info("├── %s clones: %s", len(avail_clones_names), ", ".join(avail_clones_names))
             else:
-                logger.info("├── No clones.")
+                logger.info("├── no clones")
 
-            avail_sculpts_names = [path.stem for path in self.get_available_sculpt_run_dirs(mh)]
+            
             if avail_sculpts_names:
-                logger.info("└── Sculpts (%s): %s", len(avail_sculpts_names), ", ".join(avail_sculpts_names))
+                logger.info("└── %s sculpts: %s", len(avail_sculpts_names), ", ".join(avail_sculpts_names))
             else:
-                logger.info("└── No sculpts.")
+                logger.info("└── no sculpts")
