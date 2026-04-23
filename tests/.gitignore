@@ -1,0 +1,8 @@
+# Test project specific ignores
+*.npz
+*.log
+*.png
+*.pdf
+
+clones/
+
