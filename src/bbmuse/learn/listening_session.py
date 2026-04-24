@@ -6,7 +6,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-from bbmuse.learn.module_handler_listener import ModuleHandlerListener
+from bbmuse.learn.module_listener import ModuleListener
 
 class ListeningSession:
     def __init__(self, project, module_manager):
@@ -18,7 +18,7 @@ class ListeningSession:
 
         for mh in self.project.get_module_handlers():
             if self.module_manager.is_armed(mh):
-                listener = ModuleHandlerListener(mh, self.project.get_blackboard())
+                listener = ModuleListener(mh, self.project.get_blackboard())
                 listeners.append(listener)
                 listener.activate_listen()
 

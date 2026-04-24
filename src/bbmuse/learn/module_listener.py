@@ -7,7 +7,7 @@ import numpy as np
 from bbmuse.engine.module_handler import ModuleHandler
 from bbmuse.engine.blackboard import Blackboard
 
-class ModuleHandlerListener:
+class ModuleListener:
 
     def __init__(self, mod_handler: ModuleHandler, blackboard: Blackboard):
         self._mod_handler = mod_handler
