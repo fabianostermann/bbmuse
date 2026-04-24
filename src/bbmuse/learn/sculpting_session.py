@@ -13,12 +13,14 @@ from typing import Dict
 
 logger = logging.getLogger(__name__)
 
+from bbmuse.engine.project import BbMuseProject
+
 from bbmuse.learn.module_clone import ModuleClone
 from bbmuse.learn.checkpoint import Checkpoint
 from bbmuse.learn.policy_prober import PolicyProber
 
 class SculptingSession:
-    def __init__(self, project, module_manager, device=torch.device("cpu")):
+    def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
         self.project = project
         self.blackboard = self.project.get_blackboard()
         self.module_manager = module_manager
@@ -81,21 +83,30 @@ class SculptingSession:
 
                 if num_updates > 0:
 
-                    # run policy -> collect episodes
-                    self.clone_model.eval() # deactivate dropout, BatchNorm etc.
-                    with torch.no_grad():
-                        self.project.run(quit_after=0.1, run_mode=0)
-
-                    episode = self.prober.flush()
+                    # collect trajectories with old policy
+                    trajectories = self.collect(self.clone_model, self.project, self.prober)
+                    advantages = self.compute_advantages(trajectories)
 
                     self.clone_model.train()
                     optimizer.zero_grad()
 
-                    # TODO: Put PPO here
-                    #for name, target in targets.items():
-                    #    loss = loss + loss_functions[name](preds[name], target)
-                    #loss.backward()
-                    #optimizer.step()
+                    # TODO: make the following real code
+                    # Multiple gradient updates on the same data
+                    for epoch in range(epochs):
+                        for minibatch in trajectories:
+                            r = π_θ(a|s) / π_θ_alt(a|s) # Importance Ratio
+                            clipped = clip(r, 1-ε, 1+ε)
+                            
+                            loss = -mean(min(r * A, clipped * A)) # PPO clip loss
+                            
+                            loss.backward()
+                            optimizer.step()
+
+                    # Update old policy
+                    π_θ_alt = π_θ
+                    
+                    loss.backward()
+                    optimizer.step()
 
                     desc = f"num_updates={num_updates:04d} loss={loss:.6f}"
                     pbar.set_description(desc)
@@ -112,3 +123,16 @@ class SculptingSession:
             pt = Checkpoint(final_path)
             pt.save(self.clone_model, num_updates, loss, optimizer)
         
+    def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber):
+        # run policy -> collect episodes
+        policy_model.eval() # deactivate dropout, BatchNorm etc.
+        with torch.no_grad():
+            env.run(quit_after=0.1, run_mode=0)
+
+        trajectories = prober.flush()
+        return trajectories
+
+    def compute_advantages(self, trajectories, discount_factor = 0.99, gae_lambda = 0.95):
+        # TODO (1) Baseline (noisy): A = G, advantage as pure return value
+        # TODO (2) PPO standard: Critic + GAE
+        raise NotImplementedError()
