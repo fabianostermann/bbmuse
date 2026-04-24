@@ -69,6 +69,7 @@ class ModuleManager():
         assert not module_handler is None, "Argument should be a valid ModuleHandler object"
         return self._modules_dir / module_handler.get_name().lower()
 
+    # TODO later: change function names and variables called "episodes" for listen & clone to "records" 
     def get_episodes_dir(self, module_handler):
         episodes_dir = self.get_module_dir(module_handler) / "records"
         episodes_dir.mkdir(parents=True, exist_ok=True)
