@@ -16,3 +16,6 @@ def _unpack(arr: np.ndarray):
 
 def _loss(pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return F.mse_loss(pred, target)
+
+def _reward():
+    return valueA + valueB
