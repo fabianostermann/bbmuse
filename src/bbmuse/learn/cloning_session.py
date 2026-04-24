@@ -113,7 +113,7 @@ class CloningSession:
         episode: Dict[str, Dict[str, object]],
         epochs: int = 100,
         lr: float = 1e-3,
-        fallback_loss_function = F.mse_loss,
+        fallback_loss_function = F.l1_loss, # mean absolute error
         checkpoint_interval: int = 10,
     ) -> None:
         
