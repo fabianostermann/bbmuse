@@ -8,12 +8,14 @@ logger = logging.getLogger(__name__)
 
 class BaseHandler():
 
-    def __init__(self, path):
+    def __init__(self, path, project_id=""):
         path = Path(path)
         if not path.exists() or not path.is_file:
             raise FileNotFoundError(f"File path is no valid file: {path}")
         self._file_location = path.absolute()
         self._name = path.stem
+
+        self.project_id = project_id
         
         self.consider_hot_reload()
         
@@ -36,9 +38,10 @@ class BaseHandler():
         """
         Perform dynamic import of a python module from a given file location
         """
-        spec = importlib.util.spec_from_file_location(filepath.stem, filepath)
+        spec = importlib.util.spec_from_file_location(filepath.stem+str(self.project_id), filepath)
         python_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(python_module)
+        logger.debug("Dynamic import complete: %s", python_module.__name__)
         return python_module
         
     def consider_hot_reload(self):

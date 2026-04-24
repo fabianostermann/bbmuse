@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 # TODO: Check for required reps that are unused (linting?)
 class BbMuseProject():
 
-    def __init__(self, project_dir):
+    def __init__(self, project_dir, project_id=""):
+        self.project_id = project_id
+
         self.controller = None
         self.config = Config(project_dir)
         
@@ -35,7 +37,7 @@ class BbMuseProject():
         for location in self.config["path"]["modules"]:
             logger.debug("Searching for module files in location: %s", location)
             for path in self.config.get_project_dir().joinpath(location).rglob("*.py"):
-                handler = ModuleHandler(path)
+                handler = ModuleHandler(path, project_id=self.project_id)
                 if handler.get_name().lower() in [mh.get_name().lower() for mh in mods_handlers]:
                     raise ValueError(f"Duplicate module name (case ignored): {handler.get_name()}")
                 mods_handlers.append(handler)
