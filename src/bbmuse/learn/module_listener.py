@@ -24,20 +24,23 @@ class ModuleListener:
         # check for required methods
         for required_rep_name in self._mod_handler.get_requires():
             rh = self._blackboard.get(required_rep_name)
-            self._check_function_exists(rh, "_pack")
+            assert self._check_function_exists(rh, "_pack")
         for used_rep_name in self._mod_handler.get_uses():
             rh = self._blackboard.get(used_rep_name)
-            self._check_function_exists(rh, "_pack")
+            assert self._check_function_exists(rh, "_pack")
         for provided_rep_name in self._mod_handler.get_provides():
             rh = self._blackboard.get(provided_rep_name)
-            self._check_function_exists(rh, "_pack")
+            assert self._check_function_exists(rh, "_pack")
     
     def _check_function_exists(self, rep_handler, func_name):
         func = getattr(rep_handler.get_component(), func_name, None)
         if func is None:
-            raise SyntaxError(f"Repr. {rep_handler} has no {func_name}() method.")
+            logger.warning(f"Repr. {rep_handler} has no {func_name}() method.")
+            return False
         if not callable(func):
-            raise SyntaxError(f"{func_name}() in {rep_handler} is not callable.")
+            logger.warning(f"{func_name}() in {rep_handler} is not callable.")
+            return False
+        return True
 
     def activate_listen(self):
         self._check_requirements()

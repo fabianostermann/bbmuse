@@ -23,34 +23,36 @@ class CloningSession:
         self.module_manager = module_manager
         self.device = device
 
-    def run(self, args):
+    def build(self, args):
         self.module_handler = self.module_manager.identify_module(args.module[0])
         if not self.module_handler:
             logger.error("Module handler not found: %s", args.module[0])
             sys.exit(1)
 
+        self.dry_run = args.dry_run
+
         # load packed representations from recorded episodes
         ep_paths = self.module_manager.get_available_episode_paths(self.module_handler)
         ep_path = ep_paths[-1] # TODO: load all episodes, just loading last episode for now
-        episode = self.load_episode(ep_path)
+        self.episode = self.load_episode(ep_path)
 
         # check if episode matches the given module handler
-        assert self.module_handler.get_requires() == list(episode["requires"].keys()),\
-            f"Requires in module handler and loaded episode does not match, got: {self.module_handler.get_requires()} and {list(episode["requires"].keys())}"
-        assert self.module_handler.get_uses() == list(episode["uses"].keys()),\
-            f"Uses in module handler and loaded episode does not match, got: {self.module_handler.get_uses()} and {list(episode["uses"].keys())}"
-        assert self.module_handler.get_provides() == list(episode["provides"].keys()),\
-            f"Provides in module handler and loaded episode does not match, got: {self.module_handler.get_provides()} and {list(episode["provides"].keys())}"
+        assert self.module_handler.get_requires() == list(self.episode["requires"].keys()),\
+            f"Requires in module handler and loaded episode does not match, got: {self.module_handler.get_requires()} and {list(self.episode["requires"].keys())}"
+        assert self.module_handler.get_uses() == list(self.episode["uses"].keys()),\
+            f"Uses in module handler and loaded episode does not match, got: {self.module_handler.get_uses()} and {list(self.episode["uses"].keys())}"
+        assert self.module_handler.get_provides() == list(self.episode["provides"].keys()),\
+            f"Provides in module handler and loaded episode does not match, got: {self.module_handler.get_provides()} and {list(self.episode["provides"].keys())}"
 
         logger.info("Loaded episode from: %s", ep_path)
         shapes = {
             group_name: { rep_name: arr.shape for rep_name, arr in group.items() }
-            for group_name, group in episode.items()
+            for group_name, group in self.episode.items()
         }
         logger.debug("Shapes are: %s", shapes)
         assert len({
             arr.shape[0]
-            for group in episode.values()
+            for group in self.episode.values()
             for arr in group.values()
         }) == 1, "Inconsistent timestep counts across episode arrays"
 
@@ -58,10 +60,7 @@ class CloningSession:
         input_dims_dict = {k: v[1:] for k, v in (shapes["uses"] | shapes["requires"]).items()}
         output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
         path_to_backbone = self.get_path_to_backbone(args.backbone)
-        clone_model = ModuleClone(input_dims_dict, output_dims_dict, path_to_backbone)
-
-        # run training (TODO: allow use of a config file for hyperparameters)
-        self.train(clone_model, episode)
+        self.clone_model = ModuleClone(input_dims_dict, output_dims_dict, path_to_backbone)
 
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
@@ -108,9 +107,7 @@ class CloningSession:
 
         return loss_functions
 
-    def train(self,
-        clone_model: torch.nn.Module,
-        episode: Dict[str, Dict[str, object]],
+    def run(self,
         epochs: int = 100,
         lr: float = 1e-3,
         fallback_loss_function = F.l1_loss, # mean absolute error
@@ -118,16 +115,17 @@ class CloningSession:
     ) -> None:
         
         # init run & checkpoint directory
-        curr_run_dir = self.module_manager.create_next_clone_run_dir(self.module_handler)
+        if not self.dry_run:
+            curr_run_dir = self.module_manager.create_next_clone_run_dir(self.module_handler)
 
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
-        clone_model.to(self.device)
-        clone_model.train()
-        optimizer = torch.optim.Adam(clone_model.parameters(), lr=lr)
+        self.clone_model.to(self.device)
+        self.clone_model.train()
+        optimizer = torch.optim.Adam(self.clone_model.parameters(), lr=lr)
 
-        input_arrays = episode["uses"] | episode["requires"]
-        target_arrays = episode["provides"]
+        input_arrays = self.episode["uses"] | self.episode["requires"]
+        target_arrays = self.episode["provides"]
 
         inputs = {
             name: torch.as_tensor(arr, dtype=torch.float32, device=self.device)
@@ -145,7 +143,7 @@ class CloningSession:
 
                 if epoch > 0:
                     optimizer.zero_grad()
-                    preds = clone_model(inputs)
+                    preds = self.clone_model(inputs)
 
                     for name, target in targets.items():
                         loss = loss + loss_functions[name](preds[name], target)
@@ -158,12 +156,13 @@ class CloningSession:
                     logger.debug(desc)
 
                 # save checkpoints every 10 epochs (default)
-                if epoch % checkpoint_interval == 0:
+                if not self.dry_run and epoch % checkpoint_interval == 0:
                     ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
                     ckpt = Checkpoint(ckpt_path)
-                    ckpt.save(clone_model, epoch, loss, optimizer)
+                    ckpt.save(self.clone_model, epoch, loss, optimizer)
 
-        final_path = self.module_manager.get_final_model_path(curr_run_dir)
-        pt = Checkpoint(final_path)
-        pt.save(clone_model, epoch, loss, optimizer)
+        if not self.dry_run:
+            final_path = self.module_manager.get_final_model_path(curr_run_dir)
+            pt = Checkpoint(final_path)
+            pt.save(self.clone_model, epoch, loss, optimizer)
         

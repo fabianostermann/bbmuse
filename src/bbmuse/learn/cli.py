@@ -43,16 +43,19 @@ def process_args():
     sub_status.add_argument('-s', "--short", action="store_true", help="Give the output in the short-format.")
     
     sub_listen = subparsers.add_parser("listen", help='Starts bbmuse and collects data of armed modules.', parents=[common])
-    
+    sub_listen.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
+
     sub_clone = subparsers.add_parser("clone", help='Train a model to mimic a specific module based on previously collected data.', parents=[common])
     sub_clone.add_argument('module', nargs=1, help="Path or name of a module")
     sub_clone.add_argument("--backbone", default=None, type=str, help="Path to a backbone py file")
     sub_clone.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
+    sub_clone.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
 
     sub_sculpt = subparsers.add_parser("sculpt", help='Refine a trained model based on heuristic constraints and human feedback.', parents=[common])
     sub_sculpt.add_argument('module', nargs=1, help="Path or name of a module")
     sub_sculpt.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
-    
+    sub_sculpt.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
+
     sub_apply = subparsers.add_parser("apply", help='TODO write help', parents=[common])
     sub_apply.add_argument('module', nargs=1, help="Path or name of a module")
     

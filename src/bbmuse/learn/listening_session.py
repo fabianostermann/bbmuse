@@ -25,10 +25,10 @@ class ListeningSession:
         self.project.run(run_mode=0)
 
         if listener in listeners:
-            ep_path = self.module_manager.get_next_episode_path(listener.get_module_handler())
-
             rep_arrays = listener.flush()
-            if rep_arrays:
-                np.savez_compressed(ep_path, **rep_arrays)
-            else:
-                logger.warning("Rep_array was empty. Nothing to write to disk.")
+            if not args.dry_run:
+                if rep_arrays:
+                    ep_path = self.module_manager.get_next_episode_path(listener.get_module_handler())
+                    np.savez_compressed(ep_path, **rep_arrays)
+                else:
+                    logger.warning("Rep_array was empty. Nothing to write to disk.")

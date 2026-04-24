@@ -47,14 +47,16 @@ class Session():
         logger.debug("Starting CloningSession..")
         from bbmuse.learn.cloning_session import CloningSession
         cs = CloningSession(self.project, self.module_manager, device=device)
-        cs.run(args)
+        cs.build(args)
+        cs.run()
 
     def sculpt(self, args):
         device = self.get_desired_torch_device(args.device)
         logger.debug("Starting SculptingSession..")
         from bbmuse.learn.sculpting_session import SculptingSession
         cs = SculptingSession(self.project, self.module_manager, device=device)
-        cs.run(args)
+        cs.build(args)
+        cs.run()
 
     def apply(self, args):
         logger.error("apply() is not implemented yet.")
