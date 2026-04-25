@@ -18,6 +18,7 @@ from bbmuse.engine.project import BbMuseProject
 from bbmuse.learn.module_clone import ModuleClone
 from bbmuse.learn.checkpoint import Checkpoint
 from bbmuse.learn.policy_prober import PolicyProber
+from bbmuse.learn.policy_model import PolicyModel
 
 class SculptingSession:
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
@@ -37,11 +38,12 @@ class SculptingSession:
         # load clone from disk
         clone_dirs = self.module_manager.get_available_clone_run_dirs(self.module_handler)
         clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
-        self.clone_model = Checkpoint(clone_final_path, self.device).load().make_model()
+        clone_model = Checkpoint(clone_final_path, self.device).load().make_model()
+        self.policy_model = PolicyModel(clone_model)
         logger.info("Loaded model from: %s", clone_final_path)
 
         # make module prober
-        self.prober = PolicyProber(self.clone_model, self.module_handler, self.project.get_blackboard())
+        self.prober = PolicyProber(self.policy_model, self.module_handler, self.project.get_blackboard())
         self.prober.activate_listen()
 
 
@@ -65,63 +67,78 @@ class SculptingSession:
         epochs: int = 10,
         lr: float = 1e-3,
         fallback_loss_function = F.l1_loss, # mean absolute error
-        checkpoint_interval: int = 10,
+        checkpoint_interval: int = None,
     ) -> None:
         
         # init run & checkpoint directory
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler)
 
+        if checkpoint_interval is None:
+            checkpoint_interval = epochs // 10 # default: 10 checkpoints per training run
+
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
-        self.clone_model.to(self.device)
-        optimizer = torch.optim.Adam(self.clone_model.parameters(), lr=lr)
+        self.policy_model.to(self.device)
+        optimizer = torch.optim.Adam(self.policy_model.parameters(), lr=lr)
 
         with tqdm(range(num_updates+1)) as pbar:
             for num_updates in pbar:
-                loss = 0.0
 
                 if num_updates > 0:
 
-                    # collect trajectories with old policy
-                    trajectories = self.collect(self.clone_model, self.project, self.prober)
+                    # collect trajectories with current policy
+                    trajectories = self.collect(self.policy_model, self.project, self.prober)
                     advantages = self.compute_advantages(trajectories)
 
-                    self.clone_model.train()
-                    optimizer.zero_grad()
+                    # extract what we need once, outside the loop
+                    states = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('requires__') or k.startswith('uses__')}
+                    old_log_probs = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('log_probs__')}
+                    actions = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('actions__')}
 
-                    # TODO: make the following real code
-                    # Multiple gradient updates on the same data
+                    self.policy_model.train()
+
                     for epoch in range(epochs):
-                        for minibatch in trajectories:
-                            r = π_θ(a|s) / π_θ_alt(a|s) # Importance Ratio
-                            clipped = clip(r, 1-ε, 1+ε)
-                            
-                            loss = -mean(min(r * A, clipped * A)) # PPO clip loss
-                            
-                            loss.backward()
-                            optimizer.step()
+                        # recompute log probs of OLD actions under CURRENT policy
+                        new_log_probs = self.policy_model.log_prob(states, actions)
 
-                    # Update old policy
-                    π_θ_alt = π_θ
-                    
-                    loss.backward()
-                    optimizer.step()
+                        total_loss = 0.0
+                        for head_name in new_log_probs.keys():
+                            A = advantages[f'{head_name}']
+                            old_lp = old_log_probs[head_name]
+                            new_lp = new_log_probs[head_name]
 
-                    desc = f"num_updates={num_updates:04d} loss={loss:.6f}"
+                            # importance ratio in log space for numerical stability
+
+                            r = torch.exp(new_lp - old_lp)
+
+                            # PPO clip loss
+                            eps = 0.2
+                            clipped = torch.clamp(r, 1 - eps, 1 + eps)
+                            loss = -torch.mean(torch.min(r * A, clipped * A))
+                            total_loss = total_loss + loss  # accumulate across heads
+
+                        optimizer.zero_grad()
+                        total_loss.backward()  # one backward through the full shared graph
+                        optimizer.step()
+
+                    desc = f"num_updates={num_updates:04d} total_loss={loss:.6f}"
                     pbar.set_description(desc)
                     logger.debug(desc)
 
                 # save policy checkpoints every 10 num_updates (default)
                 if not self.dry_run and num_updates % checkpoint_interval == 0:
+                    raise NotImplementedError("checkpoints do not handle PolicyModel objects yet. Make it so")
                     ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
                     ckpt = Checkpoint(ckpt_path)
-                    ckpt.save(self.clone_model, num_updates, loss, optimizer)
+                    ckpt.save(self.policy_model, num_updates, loss, optimizer)
 
         if not self.dry_run:
             final_path = self.module_manager.get_final_model_path(curr_run_dir)
             pt = Checkpoint(final_path)
-            pt.save(self.clone_model, num_updates, loss, optimizer)
+            pt.save(self.policy_model, num_updates, loss, optimizer)
+
+            # TODO: track loss and other measures/parameters and save to disk
         
     def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber):
         # run policy -> collect episodes
@@ -133,6 +150,23 @@ class SculptingSession:
         return trajectories
 
     def compute_advantages(self, trajectories, discount_factor = 0.99, gae_lambda = 0.95):
-        # TODO (1) Baseline (noisy): A = G, advantage as pure return value
-        # TODO (2) PPO standard: Critic + GAE
-        raise NotImplementedError()
+        # TODO extend advantage calculation to PPO standard: Critic with loss + GAE
+        advantages = {}
+
+        reward_keys = [k for k in trajectories.keys() if k.startswith('rewards__')]
+
+        for reward_key in reward_keys:
+            head = reward_key.split('__')[1]  # e.g. 'ProvRep'
+            rewards = trajectories[reward_key]  # shape: (T,)
+
+            T = len(rewards)
+            returns = torch.zeros(T, device=rewards.device)
+
+            G = 0.0
+            for t in reversed(range(T)):
+                G = rewards[t] + discount_factor * G
+                returns[t] = G
+
+            advantages[f'{head}'] = returns
+
+        return advantages

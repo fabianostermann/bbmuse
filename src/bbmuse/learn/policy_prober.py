@@ -9,16 +9,18 @@ from bbmuse.engine.module_handler import ModuleHandler
 from bbmuse.engine.blackboard import Blackboard
 
 from bbmuse.learn.module_listener import ModuleListener
+from bbmuse.learn.policy_model import PolicyModel
 
 class PolicyProber(ModuleListener):
 
-    def __init__(self, policy_model, mod_handler: ModuleHandler, blackboard: Blackboard):
+    def __init__(self, policy_model: PolicyModel, mod_handler: ModuleHandler, blackboard: Blackboard):
         super().__init__(mod_handler, blackboard)
 
         self.policy_model = policy_model
         self.device = next(policy_model.parameters()).device
 
         self._actions_buffer = {}  # rep_name -> list of arrays
+        self._log_probs_buffer = {}  # rep_name -> list of arrays
         self._rewards_buffer = {}  # rep_name -> list of scalars
 
     def _check_requirements(self):
@@ -39,13 +41,19 @@ class PolicyProber(ModuleListener):
 
         # let policy model predict actions
         with torch.no_grad():
-            actions = self.policy_model(last_inputs)
+            actions, log_probs = self.policy_model.sample_with_log_prob(last_inputs)
 
-        # write model outputs in actions_buffer (predictions for provides)
+        # write model outputs to buffer (predictions for provides)
         for rep_name, action_array in actions.items():
             if rep_name not in self._actions_buffer:
                 self._actions_buffer[rep_name] = []
             self._actions_buffer[rep_name].append(action_array)
+
+        # write log_probs to buffer (needed for PPO importance ratio)
+        for rep_name, log_prob_array in log_probs.items():
+            if rep_name not in self._log_probs_buffer:
+                self._log_probs_buffer[rep_name] = []
+            self._log_probs_buffer[rep_name].append(log_prob_array)
         
     def _after_hook(self):
         # logger.debug("Running _after_hook() on module %s", self._mod_handler)
@@ -67,7 +75,7 @@ class PolicyProber(ModuleListener):
             if self._check_function_exists(rep_handler, "_reward"):
                 reward = rep_handler.get_component()._reward()
             else:
-                reward = 0
+                reward = 0 # default entry, will not contribute to any sum
             if rep_name not in self._rewards_buffer:
                 self._rewards_buffer[rep_name] = []
             self._rewards_buffer[rep_name].append(reward)
@@ -87,6 +95,12 @@ class PolicyProber(ModuleListener):
             for k, v in self._actions_buffer.items()
         }
 
+        # Actions are already torch tensors in lists -> stack directly
+        rep_arrays |= {
+            f"log_probs__{k}": torch.stack(v)
+            for k, v in self._log_probs_buffer.items()
+        }
+
         # Rewards are scalars .> convert to a 1D torch tensor per rep
         rep_arrays |= {
             f"rewards__{k}": torch.as_tensor(v, dtype=torch.float32, device=self.device)
@@ -96,5 +110,6 @@ class PolicyProber(ModuleListener):
         assert len(set([v.shape[0] for v in rep_arrays.values()])) == 1,\
             "Episode lengths do not match."
         self._actions_buffer.clear()
+        self._log_probs_buffer.clear()
         self._rewards_buffer.clear()
         return rep_arrays

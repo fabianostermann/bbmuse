@@ -111,12 +111,15 @@ class CloningSession:
         epochs: int = 100,
         lr: float = 1e-3,
         fallback_loss_function = F.l1_loss, # mean absolute error
-        checkpoint_interval: int = 10,
+        checkpoint_interval: int = None, # default: epochs / 10
     ) -> None:
         
         # init run & checkpoint directory
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_clone_run_dir(self.module_handler)
+
+        if checkpoint_interval is None:
+            checkpoint_interval = epochs // 10 # default: 10 checkpoints per training run
 
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
@@ -155,7 +158,7 @@ class CloningSession:
                     pbar.set_description(desc)
                     logger.debug(desc)
 
-                # save checkpoints every 10 epochs (default)
+                # save checkpoints
                 if not self.dry_run and epoch % checkpoint_interval == 0:
                     ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
                     ckpt = Checkpoint(ckpt_path)
@@ -165,4 +168,6 @@ class CloningSession:
             final_path = self.module_manager.get_final_model_path(curr_run_dir)
             pt = Checkpoint(final_path)
             pt.save(self.clone_model, epoch, loss, optimizer)
+
+            # TODO: track loss and other measures/parameters and save to disk
         
