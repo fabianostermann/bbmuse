@@ -64,7 +64,6 @@ class ModuleClone(nn.Module):
         logger.debug("Output heads are: %s", self.output_heads)
 
     def forward(self, inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        logger.debug("Running forward on module clone.")
         encoded = []
         for name, encoder in self.input_encoders.items():
             encoded.append(encoder(inputs[name]))

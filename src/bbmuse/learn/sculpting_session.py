@@ -86,6 +86,7 @@ class SculptingSession:
             for num_updates in pbar:
 
                 if num_updates > 0:
+                    logger.debug("Start collecting trajectories..")
 
                     # collect trajectories with current policy
                     trajectories = self.collect(self.policy_model, self.project, self.prober)
@@ -98,31 +99,34 @@ class SculptingSession:
 
                     self.policy_model.train()
 
+                    logger.debug("Train policy model..")
                     for epoch in range(epochs):
                         # recompute log probs of OLD actions under CURRENT policy
-                        new_log_probs = self.policy_model.log_prob(states, actions)
-
+                        new_log_probs, entropies = self.policy_model.log_prob_with_entropy(states, actions)
+                        
                         total_loss = 0.0
+                        entropy_coef = 0.01  # tunable, start small
                         for head_name in new_log_probs.keys():
-                            A = advantages[f'{head_name}']
+                            A = advantages[head_name]
                             old_lp = old_log_probs[head_name]
                             new_lp = new_log_probs[head_name]
 
                             # importance ratio in log space for numerical stability
-
                             r = torch.exp(new_lp - old_lp)
 
                             # PPO clip loss
                             eps = 0.2
                             clipped = torch.clamp(r, 1 - eps, 1 + eps)
-                            loss = -torch.mean(torch.min(r * A, clipped * A))
-                            total_loss = total_loss + loss  # accumulate across heads
+                            policy_loss = -torch.mean(torch.min(r * A, clipped * A))
+                            entropy_loss = -torch.mean(entropies[head_name])  # negative because we want to maximize entropy
+
+                            total_loss = total_loss + policy_loss + entropy_coef * entropy_loss
 
                         optimizer.zero_grad()
                         total_loss.backward()  # one backward through the full shared graph
                         optimizer.step()
 
-                    desc = f"num_updates={num_updates:04d} total_loss={loss:.6f}"
+                    desc = f"num_updates={num_updates:04d} loss={total_loss:.6f}"
                     pbar.set_description(desc)
                     logger.debug(desc)
 
@@ -151,6 +155,7 @@ class SculptingSession:
 
     def compute_advantages(self, trajectories, discount_factor = 0.99, gae_lambda = 0.95):
         # TODO extend advantage calculation to PPO standard: Critic with loss + GAE
+        # TODO: truncated GAE (we have endless episodes)
         advantages = {}
 
         reward_keys = [k for k in trajectories.keys() if k.startswith('rewards__')]

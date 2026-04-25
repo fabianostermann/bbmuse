@@ -42,9 +42,10 @@ class PolicyModel(nn.Module):
             log_probs[name] = dist.log_prob(action).sum(-1)
         return actions, log_probs
 
-    def log_prob(self, inputs, actions):
+    def log_prob_with_entropy(self, inputs, actions):
         dists = self._build_dists(inputs)
-        return {
-            name: dist.log_prob(actions[name]).sum(-1)
-            for name, dist in dists.items()
-        }
+        log_probs, entropies = {}, {}
+        for name, dist in dists.items():
+            log_probs[name] = dist.log_prob(actions[name]).sum(-1)
+            entropies[name] = dist.entropy().sum(-1)
+        return log_probs, entropies
