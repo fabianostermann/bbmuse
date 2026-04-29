@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 from bbmuse.learn.module_clone import ModuleClone
 from bbmuse.learn.checkpoint import Checkpoint
+from bbmuse.learn.session_logger import SessionLogger
 
 class CloningSession:
     def __init__(self, project, module_manager, device=torch.device("cpu")):
@@ -114,6 +115,8 @@ class CloningSession:
         checkpoint_interval: int = None, # default: epochs / 10
     ) -> None:
         
+        session_logger = SessionLogger()
+
         # init run & checkpoint directory
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_clone_run_dir(self.module_handler)
@@ -150,24 +153,26 @@ class CloningSession:
 
                     for name, target in targets.items():
                         loss = loss + loss_functions[name](preds[name], target)
-
+                        
+                    loss = loss / len(targets) # important because decouples task count from hyperparameter tuning
                     loss.backward()
                     optimizer.step()
 
+                    session_logger.log(epoch=epoch, loss=loss.item())
+
                     desc = f"epoch={epoch:04d} loss={loss:.6f}"
                     pbar.set_description(desc)
-                    logger.debug(desc)
 
                 # save checkpoints
                 if not self.dry_run and epoch % checkpoint_interval == 0:
                     ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
                     ckpt = Checkpoint(ckpt_path)
                     ckpt.save(self.clone_model, epoch, loss, optimizer)
+                    session_logger.write_to_disk(curr_run_dir)
 
         if not self.dry_run:
             final_path = self.module_manager.get_final_model_path(curr_run_dir)
             pt = Checkpoint(final_path)
             pt.save(self.clone_model, epoch, loss, optimizer)
-
-            # TODO: track loss and other measures/parameters and save to disk
+            session_logger.write_to_disk(curr_run_dir)
         

@@ -19,6 +19,7 @@ from bbmuse.learn.module_clone import ModuleClone
 from bbmuse.learn.checkpoint import Checkpoint
 from bbmuse.learn.policy_prober import PolicyProber
 from bbmuse.learn.policy_model import PolicyModel
+from bbmuse.learn.session_logger import SessionLogger
 
 class SculptingSession:
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
@@ -70,6 +71,8 @@ class SculptingSession:
         checkpoint_interval: int = None,
     ) -> None:
         
+        session_logger = SessionLogger()
+        
         # init run & checkpoint directory
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler)
@@ -86,7 +89,7 @@ class SculptingSession:
             for num_updates in pbar:
 
                 if num_updates > 0:
-                    logger.debug("Start collecting trajectories..")
+                    logger.debug("Start collecting trajectories (exploration phase)..")
 
                     # collect trajectories with current policy
                     trajectories = self.collect(self.policy_model, self.project, self.prober)
@@ -99,7 +102,7 @@ class SculptingSession:
 
                     self.policy_model.train()
 
-                    logger.debug("Train policy model..")
+                    logger.debug("Train policy model (learning phase)..")
                     for epoch in range(epochs):
                         # recompute log probs of OLD actions under CURRENT policy
                         new_log_probs, entropies = self.policy_model.log_prob_with_entropy(states, actions)
@@ -119,8 +122,11 @@ class SculptingSession:
                             clipped = torch.clamp(r, 1 - eps, 1 + eps)
                             policy_loss = -torch.mean(torch.min(r * A, clipped * A))
                             entropy_loss = -torch.mean(entropies[head_name])  # negative because we want to maximize entropy
+                            # TODO BC loss! (original model output distribution or hand-crafted oracle?)
 
                             total_loss = total_loss + policy_loss + entropy_coef * entropy_loss
+
+                        total_loss = total_loss / len(new_log_probs) # important because decouples task count from hyperparameter tuning
 
                         optimizer.zero_grad()
                         total_loss.backward()  # one backward through the full shared graph
@@ -128,21 +134,22 @@ class SculptingSession:
 
                     desc = f"num_updates={num_updates:04d} loss={total_loss:.6f}"
                     pbar.set_description(desc)
-                    logger.debug(desc)
+
+                    session_logger.log(num_updates=num_updates, total_loss=total_loss.item())
 
                 # save policy checkpoints every 10 num_updates (default)
                 if not self.dry_run and num_updates % checkpoint_interval == 0:
-                    raise NotImplementedError("checkpoints do not handle PolicyModel objects yet. Make it so")
-                    ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
-                    ckpt = Checkpoint(ckpt_path)
-                    ckpt.save(self.policy_model, num_updates, loss, optimizer)
+                    # TODO checkpoints do not handle PolicyModel objects yet. Make it so!
+                    #ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
+                    #ckpt = Checkpoint(ckpt_path)
+                    #ckpt.save(self.policy_model, num_updates, loss, optimizer)
+                    session_logger.write_to_disk(curr_run_dir)
 
         if not self.dry_run:
-            final_path = self.module_manager.get_final_model_path(curr_run_dir)
-            pt = Checkpoint(final_path)
-            pt.save(self.policy_model, num_updates, loss, optimizer)
-
-            # TODO: track loss and other measures/parameters and save to disk
+            #final_path = self.module_manager.get_final_model_path(curr_run_dir)
+            #pt = Checkpoint(final_path)
+            #pt.save(self.policy_model, num_updates, loss, optimizer)
+            session_logger.write_to_disk(curr_run_dir)
         
     def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber):
         # run policy -> collect episodes
