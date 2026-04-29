@@ -2,28 +2,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# TODO: include groups in visualization!
-# TODO: Try to repeat visualization multiple times (iterate over seed) and count "crossed lines"
-def plot_dependency_graph(project, filename="graph.png", include_uses=True):
-    """Plot the bipartite dependency graph (Representations & Modules) layered by hard deps.
-    
-    Edges:
-    - requires: representation -> module (solid)
-    - provides: module -> representation (dashed)
-    - uses:     representation -> module (dotted, optional, does not affect layering)
-    """
+def plot_dependency_graph(project, filename="graph.html", include_uses=True):
+    """Plot the bipartite dependency graph (Representations & Modules) layered by hard deps using networkx and pyvis."""
     if not project.controller:
         raise RuntimeError("Controller has not been built yet. Call build_all() first.")
 
     try:
         import networkx as nx
-        import matplotlib.pyplot as plt
-        from matplotlib.lines import Line2D
+        from pyvis.network import Network
     except Exception:
-        logger.exception("Plotting of dependency graph failed. Matplotlib or networkx package is missing.")
+        logger.exception("Plotting of dependency graph failed. networkx or pyvis package is missing.")
         return
 
-    # --- Helpers to build stable ids and readable labels ---
     def mod_id(handler):
         name = handler.get_name() if hasattr(handler, "get_name") else str(handler)
         return f"mod:{name}"
@@ -35,9 +25,9 @@ def plot_dependency_graph(project, filename="graph.png", include_uses=True):
     G = nx.DiGraph()
     module_nodes = []
     repr_nodes = set()
-    requires_edges = []   # repr -> mod (hard)
-    provides_edges = []   # mod -> repr (hard)
-    uses_edges = []       # repr -> mod (soft, optional)
+    requires_edges = []
+    provides_edges = []
+    uses_edges = []
 
     for m in project.module_handlers:
         mid = mod_id(m)
@@ -45,38 +35,32 @@ def plot_dependency_graph(project, filename="graph.png", include_uses=True):
             G.add_node(mid, kind="module")
             module_nodes.append(mid)
 
-        # requires: representation -> module (hard)
         for r in m.get_requires():
             rid = repr_id(r)
             repr_nodes.add(rid)
             requires_edges.append((rid, mid))
 
-        # provides: module -> representation (hard)
         for p in m.get_provides():
             pid = repr_id(p)
             repr_nodes.add(pid)
             provides_edges.append((mid, pid))
 
-        # uses: representation -> module (soft, optional)
         if include_uses and hasattr(m, "get_uses"):
             for u in (m.get_uses() or []):
                 uid = repr_id(u)
                 repr_nodes.add(uid)
                 uses_edges.append((uid, mid))
 
-    # Ensure all representation nodes exist
     for rid in repr_nodes:
         if rid not in G:
             G.add_node(rid, kind="representation")
 
-    # Add edges with metadata (all visible in the plot)
     G.add_edges_from(requires_edges, kind="requires")
     G.add_edges_from(provides_edges, kind="provides")
     if include_uses:
         G.add_edges_from(uses_edges, kind="uses")
 
-    # --- Compute dependency layers (topological levels) using only HARD edges ---
-    # We build a temporary graph H with only requires/provides to derive layers.
+    # --- Compute dependency layers using only hard edges ---
     H = nx.DiGraph()
     H.add_nodes_from(G.nodes())
     H.add_edges_from(requires_edges)
@@ -100,96 +84,57 @@ def plot_dependency_graph(project, filename="graph.png", include_uses=True):
         current_layer = next_layer
         layer_idx += 1
 
-    # Fallback for any unassigned nodes (should not happen without cycles)
     for n in G.nodes():
         if n not in layers:
             layers[n] = 0
 
-    # Attach as node attribute and compute left→right layout by layer
     for n, l in layers.items():
         G.nodes[n]["subset"] = l
     pos = nx.multipartite_layout(G, subset_key="subset", align="horizontal", scale=2.0)
 
-    # --- Draw: nodes (cleaner defaults, no extra edgecolor/linewidth/size args) ---
+    # --- Build pyvis network ---
+    # FIX 1: toggle_physics() statt net.options.physics.enabled = False
+    net = Network(directed=True, height="750px", width="100%")
+    net.toggle_physics(True)
+
     labels = {n: n.split(":", 1)[1] for n in G.nodes()}
-    repr_nodes_list = list(repr_nodes)
-    module_nodes_list = module_nodes
 
-    nx.draw_networkx_nodes(
-        G, pos,
-        nodelist=repr_nodes_list,
-        node_shape="o",
-        node_color="#FFEDB5",
-        label="Representations",
-    )
-    nx.draw_networkx_nodes(
-        G, pos,
-        nodelist=module_nodes_list,
-        node_shape="s",
-        node_color="#CDEAFE",
-        label="Modules",
-    )
-    nx.draw_networkx_labels(G, pos, labels=labels, font_size=9)
-
-    # --- Draw: edges ---
-    # requires: solid, slightly transparent so other styles can stand out
-    nx.draw_networkx_edges(
-        G, pos,
-        edgelist=requires_edges,
-        arrows=True,
-        #arrowstyle="-|>",
-        width=1.4,
-        alpha=0.9,
-        min_source_margin=12,  # <-- shorten at start by 10 pt
-        min_target_margin=12,  # <-- shorten at end by 10 pt
-    )
-    # provides: dashed
-    nx.draw_networkx_edges(
-        G, pos,
-        edgelist=provides_edges,
-        arrows=True,
-        #arrowstyle="-|>",
-        #style="dashed",
-        width=1.2,
-        alpha=0.9,
-        min_source_margin=12,  # <-- shorten at start by 10 pt
-        min_target_margin=12,  # <-- shorten at end by 10 pt
-    )
-    # uses: dotted + curved + drawn last with higher zorder so it doesn't hide behind others
-    if include_uses and uses_edges:
-        nx.draw_networkx_edges(
-            G, pos,
-            edgelist=uses_edges,
-            arrows=True,
-            #arrowstyle="-|>",
-            #style="dotted",
-            width=1.0,
-            alpha=0.2,
-            connectionstyle="arc3,rad=0.25",  # <-- curve the edge to avoid overlap
-            min_source_margin=12,  # <-- shorten at start by 10 pt
-            min_target_margin=12,  # <-- shorten at end by 10 pt
+    # FIX 2+3: Nodes direkt hinzufügen statt from_nx() + nachträgliche Modifikation,
+    #          damit Attribute sicher gesetzt sind und nicht durch from_nx überschrieben werden.
+    for node_id in G.nodes():
+        kind = G.nodes[node_id]["kind"]
+        x, y = pos[node_id]
+        net.add_node(
+            node_id,
+            label=labels[node_id],
+            title=node_id,
+            x=float(x * 500),
+            y=float(y * 500),
+            physics=False,
+            color="#FFEDB5" if kind == "representation" else "#CDEAFE",
+            shape="dot"     if kind == "representation" else "box",
+            size=25         if kind == "representation" else 30,
+            font={"size": 14},
         )
 
-    # --- Legend & finalize ---
-    legend_elements = [
-        Line2D([0], [0], marker="o", linestyle="None", markerfacecolor="#FFEDB5", markeredgecolor="black", label="Representation"),
-        Line2D([0], [0], marker="s", linestyle="None", markerfacecolor="#CDEAFE", markeredgecolor="black", label="Module"),
-        Line2D([0], [0], linestyle="-", color="black", label="requires (repr → module)"),
-        Line2D([0], [0], linestyle="-", color="black", label="provides (module → repr)"),
-    ]
-    if include_uses:
-        legend_elements.append(Line2D([0], [0], linestyle="-", color="black", alpha=0.2, label="uses (repr → module)"))
-    plt.legend(handles=legend_elements, loc="best", fontsize=8)
+    # FIX 4: dashes=True (Boolean) statt [5, 5] (Array wird von pyvis nicht akzeptiert)
+    for u, v, data in G.edges(data=True):
+        kind = data.get("kind", "unknown")
+        if kind == "requires":
+            net.add_edge(u, v, color="black",   width=2,   dashes=False, title="requires")
+        elif kind == "provides":
+            net.add_edge(u, v, color="#666666", width=1.5, dashes=True,  title="provides")
+        elif kind == "uses":
+            net.add_edge(u, v, color="#CCCCCC", width=0.8, dashes=True,  title="uses")
+        else:
+            net.add_edge(u, v)
 
-    plt.title(project.config["application"]["name"])
-    plt.tight_layout()
-    
+    # FIX 5+6: Pfad aus project.config wie im Original; write_html() statt show()
+    #          (show() braucht notebook=False in neueren Versionen und öffnet den Browser)
     if filename is None:
-        plt.show()
+        # Kein Dateipfad → im Browser öffnen (analog zu plt.show())
+        net.show("graph.html", notebook=False)
     else:
-        filename = project.config.get_project_dir().joinpath(filename)
-        plt.savefig(filename, bbox_inches="tight", dpi=300)
-        logger.info("Dependency graph saved to %s", filename)
-
-    plt.close()
-
+        output_path = str(project.config.get_project_dir().joinpath(filename))
+        net.write_html(output_path)
+        logger.info("Dependency graph saved to %s", output_path)
