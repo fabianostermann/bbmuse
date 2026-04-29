@@ -3,6 +3,7 @@
 *.log
 *.png
 *.pdf
+*.html
 
 clones/
-
+sculpts/
