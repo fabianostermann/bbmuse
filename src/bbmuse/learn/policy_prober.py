@@ -56,10 +56,6 @@ class PolicyProber(ModuleListener):
             self._log_probs_buffer[rep_name].append(log_prob_array)
         
     def _after_hook(self):
-        # logger.debug("Running _after_hook() on module %s", self._mod_handler)
-        # for provided_rep_name in self._mod_handler.get_provides():
-        #     rh = self._blackboard.get(provided_rep_name)
-        #     self._store(rh, self._provides_buffer)
         super()._after_hook() # packs and stores provides from original module
 
         # get last actions from buffer
