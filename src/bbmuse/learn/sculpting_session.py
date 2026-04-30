@@ -64,10 +64,12 @@ class SculptingSession:
         return loss_functions
 
     def run(self,
-        num_updates: int = 3, # 100,
+        num_updates: int = 100,
         epochs: int = 10,
-        lr: float = 1e-3,
-        fallback_loss_function = F.l1_loss, # mean absolute error
+        lr: float = 1e-4,
+        entropy_coef = 0.0,  # tunable, start small
+        bc_coef = 0.99,  # tunable, start small
+        fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = None,
     ) -> None:
         
@@ -77,8 +79,8 @@ class SculptingSession:
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler)
 
-        if checkpoint_interval is None:
-            checkpoint_interval = epochs // 10 # default: 10 checkpoints per training run
+        if checkpoint_interval is None and num_updates > 0:
+            checkpoint_interval = num_updates // 10 # default: 10 checkpoints per training run
 
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
@@ -99,6 +101,9 @@ class SculptingSession:
                     states = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('requires__') or k.startswith('uses__')}
                     old_log_probs = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('log_probs__')}
                     actions = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('actions__')}
+                    
+                    # and the actions that the original module would have chosen (used for BC)
+                    oracled_actions = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('provides__')}
 
                     self.policy_model.train()
 
@@ -106,9 +111,10 @@ class SculptingSession:
                     for epoch in range(epochs):
                         # recompute log probs of OLD actions under CURRENT policy
                         new_log_probs, entropies = self.policy_model.log_prob_with_entropy(states, actions)
-                        
+                        pred_actions = self.policy_model(states) # TODO remove duplicate forward call
+
                         total_loss = 0.0
-                        entropy_coef = 0.01  # tunable, start small
+
                         for head_name in new_log_probs.keys():
                             A = advantages[head_name]
                             old_lp = old_log_probs[head_name]
@@ -121,24 +127,41 @@ class SculptingSession:
                             eps = 0.2
                             clipped = torch.clamp(r, 1 - eps, 1 + eps)
                             policy_loss = -torch.mean(torch.min(r * A, clipped * A))
+
+                            # entropy loss
                             entropy_loss = -torch.mean(entropies[head_name])  # negative because we want to maximize entropy
-                            # TODO BC loss! (original model output distribution or hand-crafted oracle?)
+                            
+                            # BC loss
+                            bc_pred = pred_actions[head_name]           # what policy did
+                            bc_target = oracled_actions[head_name] # what original module did
+                            bc_loss = loss_functions[head_name](bc_pred, bc_target)
+                            
+                            loss_contribution = sum([
+                                policy_loss,
+                                entropy_coef * entropy_loss,
+                                bc_coef * bc_loss,
+                            ]) / len(new_log_probs) # important because decouples task count from hyperparameter tuning
 
-                            total_loss = total_loss + policy_loss + entropy_coef * entropy_loss
+                            print("policy_loss", policy_loss)
 
-                        total_loss = total_loss / len(new_log_probs) # important because decouples task count from hyperparameter tuning
+                            session_logger.log({f"loss__{head_name}": loss_contribution})
+
+                            total_loss += loss_contribution
 
                         optimizer.zero_grad()
                         total_loss.backward()  # one backward through the full shared graph
                         optimizer.step()
 
+                    session_logger.log({
+                        "num_updates": num_updates,
+                        "total_loss": total_loss,
+                    }).step()
+
                     desc = f"num_updates={num_updates:04d} loss={total_loss:.6f}"
                     pbar.set_description(desc)
 
-                    session_logger.log(num_updates=num_updates, total_loss=total_loss.item())
-
                 # save policy checkpoints every 10 num_updates (default)
-                if not self.dry_run and num_updates % checkpoint_interval == 0:
+                if not self.dry_run and checkpoint_interval and num_updates % checkpoint_interval == 0:
                     # TODO checkpoints do not handle PolicyModel objects yet. Make it so!
                     #ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
                     #ckpt = Checkpoint(ckpt_path)
@@ -155,7 +178,7 @@ class SculptingSession:
         # run policy -> collect episodes
         policy_model.eval() # deactivate dropout, BatchNorm etc.
         with torch.no_grad():
-            env.run(quit_after=0.1, run_mode=0)
+            env.run(quit_after=3, run_mode=0)
 
         trajectories = prober.flush()
         return trajectories
@@ -179,6 +202,7 @@ class SculptingSession:
                 G = rewards[t] + discount_factor * G
                 returns[t] = G
 
+            #returns = (returns - returns.mean()) / (returns.std() + 1e-8)
             advantages[f'{head}'] = returns
 
         return advantages

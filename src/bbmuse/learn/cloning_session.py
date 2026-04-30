@@ -9,6 +9,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import TensorDataset, DataLoader
+
 from typing import Dict
 
 logger = logging.getLogger(__name__)
@@ -110,19 +112,19 @@ class CloningSession:
 
     def run(self,
         epochs: int = 100,
-        lr: float = 1e-3,
-        fallback_loss_function = F.l1_loss, # mean absolute error
-        checkpoint_interval: int = None, # default: epochs / 10
+        lr: float = 1e-4,
+        batch_size: int = 512,
+        fallback_loss_function = F.mse_loss,
+        checkpoint_interval: int = None,
     ) -> None:
         
         session_logger = SessionLogger()
 
-        # init run & checkpoint directory
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_clone_run_dir(self.module_handler)
 
-        if checkpoint_interval is None:
-            checkpoint_interval = epochs // 10 # default: 10 checkpoints per training run
+        if checkpoint_interval is None and epochs > 0:
+            checkpoint_interval = epochs // 10
 
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
@@ -142,37 +144,51 @@ class CloningSession:
             for name, arr in target_arrays.items()
         }
 
+        input_keys = list(inputs.keys())
+        target_keys = list(targets.keys())
+        dataset = TensorDataset(*inputs.values(), *targets.values())
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
         logger.info("Starting training for %s epochs.", epochs)
         with tqdm(range(epochs+1)) as pbar:
             for epoch in pbar:
-                loss = 0.0
-
+            
+                epoch_loss = 0.0
                 if epoch > 0:
-                    optimizer.zero_grad()
-                    preds = self.clone_model(inputs)
 
-                    for name, target in targets.items():
-                        loss = loss + loss_functions[name](preds[name], target)
-                        
-                    loss = loss / len(targets) # important because decouples task count from hyperparameter tuning
-                    loss.backward()
-                    optimizer.step()
+                    for batch in loader:
+                        n_inputs = len(input_keys)
+                        batch_inputs = dict(zip(input_keys, batch[:n_inputs]))
+                        batch_targets = dict(zip(target_keys, batch[n_inputs:]))
 
-                    session_logger.log(epoch=epoch, loss=loss.item())
+                        optimizer.zero_grad()
+                        preds = self.clone_model(batch_inputs)
+                        loss = 0.0
 
-                    desc = f"epoch={epoch:04d} loss={loss:.6f}"
-                    pbar.set_description(desc)
+                        for name, target in batch_targets.items():
+                            repr_loss = loss_functions[name](preds[name], target)
+                            session_logger.log({f"loss__{name}": repr_loss})
+                            loss = loss + repr_loss
 
+                        loss = loss / len(batch_targets)
+                        loss.backward()
+                        optimizer.step()
+                        epoch_loss += loss.item()
+
+                    epoch_loss /= len(loader)
+                    session_logger.log({"epoch": epoch, "loss": epoch_loss}).step()
+                    pbar.set_description(f"epoch={epoch:04d} loss={epoch_loss:.6f}")
+                
                 # save checkpoints
-                if not self.dry_run and epoch % checkpoint_interval == 0:
+                if not self.dry_run and checkpoint_interval and epochs % checkpoint_interval == 0:
                     ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
                     ckpt = Checkpoint(ckpt_path)
-                    ckpt.save(self.clone_model, epoch, loss, optimizer)
+                    ckpt.save(self.clone_model, epoch, epoch_loss, optimizer)
                     session_logger.write_to_disk(curr_run_dir)
 
         if not self.dry_run:
             final_path = self.module_manager.get_final_model_path(curr_run_dir)
             pt = Checkpoint(final_path)
-            pt.save(self.clone_model, epoch, loss, optimizer)
+            pt.save(self.clone_model, epoch, epoch_loss, optimizer)
             session_logger.write_to_disk(curr_run_dir)
         

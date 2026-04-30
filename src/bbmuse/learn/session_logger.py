@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 import pickle
+from torch import Tensor
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,21 @@ class SessionLogger:
             logger.warning("pandas not available. Falling back to pickling.")
 
         self.history = []
+        self.current_step = {}
     
-    def log(self, **kwargs):
+    def log(self, record_dict):
         """Add a record to the session history."""
-        logger.debug(kwargs)
-        self.history.append(kwargs)
+        for k, v in record_dict.items():
+            if isinstance(v, Tensor):
+                record_dict[k] = v.item()
+
+        self.current_step.update(record_dict)
+        return self
+
+    def step(self):
+        logger.debug(self.current_step)
+        self.history.append(self.current_step)
+        self.current_step = {}
 
     def write_to_disk(self, run_directory):
         """Write session history to disk."""

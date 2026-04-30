@@ -35,10 +35,10 @@ class ModuleListener:
     def _check_function_exists(self, rep_handler, func_name):
         func = getattr(rep_handler.get_component(), func_name, None)
         if func is None:
-            logger.warning(f"Repr. {rep_handler} has no {func_name}() method.")
+            logger.debug(f"Repr. {rep_handler} has no {func_name}() method.")
             return False
         if not callable(func):
-            logger.warning(f"{func_name}() in {rep_handler} is not callable.")
+            logger.debug(f"{func_name}() in {rep_handler} is not callable.")
             return False
         return True
 
