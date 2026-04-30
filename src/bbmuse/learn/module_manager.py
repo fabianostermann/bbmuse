@@ -78,7 +78,7 @@ class ModuleManager():
     def get_next_episode_path(self, module_handler, tag=None):
         existing = self.get_available_episode_paths(module_handler)
         if existing:
-            last_number = int(existing[-1].stem)
+            last_number = int(existing[-1].stem.split("_")[0])
             next_number = last_number + 1
         else:
             next_number = 1
