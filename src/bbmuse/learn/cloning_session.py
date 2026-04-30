@@ -13,6 +13,8 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from typing import Dict
 
+from time import time
+
 logger = logging.getLogger(__name__)
 
 from bbmuse.learn.module_clone import ModuleClone
@@ -147,6 +149,7 @@ class CloningSession:
         dataset = TensorDataset(*inputs.values(), *targets.values()) # TODO: do this manually without torch loaders. Copy from sculpt_session
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
+        start_walltime = time()
         logger.info("Starting training for %s epochs.", epochs)
         with tqdm(range(epochs+1)) as pbar:
             for epoch in pbar:
@@ -174,7 +177,7 @@ class CloningSession:
                         epoch_loss += loss.item()
 
                     epoch_loss /= len(loader)
-                    session_logger.log({"epoch": epoch, "loss": epoch_loss}).step()
+                    session_logger.log({"epoch": epoch, "loss": epoch_loss, "walltime": time()-start_walltime}).step()
                     pbar.set_description(f"epoch={epoch:04d} loss={epoch_loss:.6f}")
                 
                 # save checkpoints

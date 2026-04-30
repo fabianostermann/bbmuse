@@ -98,7 +98,7 @@ class ModuleManager():
     def create_next_clone_run_dir(self, module_handler, tag=None):
         existing = self.get_available_clone_run_dirs(module_handler)
         if existing:
-            last_number = int(existing[-1].stem)
+            last_number = int(existing[-1].stem.split("_")[0])
             next_number = last_number + 1
         else:
             next_number = 1
@@ -120,7 +120,7 @@ class ModuleManager():
     def create_next_sculpt_run_dir(self, module_handler, tag=None):
         existing = self.get_available_sculpt_run_dirs(module_handler)
         if existing:
-            last_number = int(existing[-1].stem)
+            last_number = int(existing[-1].stem.split("_")[0])
             next_number = last_number + 1
         else:
             next_number = 1

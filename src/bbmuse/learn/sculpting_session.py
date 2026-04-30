@@ -11,6 +11,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Dict
 
+from time import time
+
 logger = logging.getLogger(__name__)
 
 from bbmuse.engine.project import BbMuseProject
@@ -87,6 +89,7 @@ class SculptingSession:
         optimizer = torch.optim.Adam(self.policy_model.parameters(), lr=lr)
 
         with tqdm(range(num_updates+1)) as pbar:
+            start_walltime = time()
             for num_updates in pbar:
 
                 if num_updates > 0:
@@ -173,6 +176,7 @@ class SculptingSession:
                     session_logger.log({
                         "num_updates": num_updates,
                         "last_epoch_loss": epoch_loss,
+                        "walltime": time()-start_walltime,
                     }).step()
 
                     desc = f"num_updates={num_updates:04d} loss={epoch_loss:.6f}"
