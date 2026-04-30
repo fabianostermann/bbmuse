@@ -22,9 +22,13 @@ class ListeningSession:
                 listeners.append(listener)
                 listener.activate_listen()
 
-        self.project.run(run_mode=0)
+        if not listeners:
+            logger.info("No modules are armed.")
+            sys.exit()
 
-        if listener in listeners:
+        self.project.run(run_mode=0, quit_after=args.quit_after)
+
+        for listener in listeners:
             rep_arrays = listener.flush()
             if not args.dry_run:
                 if rep_arrays:

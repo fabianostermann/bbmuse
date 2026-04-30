@@ -43,7 +43,8 @@ def process_args():
     sub_status.add_argument('-s', "--short", action="store_true", help="Give the output in the short-format.")
     
     sub_listen = subparsers.add_parser("listen", help='Starts bbmuse and collects data of armed modules.', parents=[common])
-    sub_listen.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
+    sub_listen.add_argument('--dry-run', action="store_true", help="Do not write to disk.")
+    sub_listen.add_argument("--quit-after", type=float, default=-1, help="Quit after the given time in seconds.")
 
     sub_clone = subparsers.add_parser("clone", help='Train a model to mimic a specific module based on previously collected data.', parents=[common])
     sub_clone.add_argument('module', nargs=1, help="Path or name of a module")
