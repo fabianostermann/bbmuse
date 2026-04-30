@@ -53,6 +53,7 @@ class ModuleListener:
         listener = self  # capture self for use inside wrapper
 
         def call_update_wrapped(bb):
+            self.bb_view = bb
             listener._before_hook()
             result = original(bb)
             listener._after_hook()

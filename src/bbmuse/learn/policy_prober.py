@@ -67,14 +67,26 @@ class PolicyProber(ModuleListener):
             rep_handler = self._blackboard.get(rep_name)
             rep_handler.get_component()._unpack(last_actions[rep_name])
             
-            # collect available rewards (self._check_function_exists(rh, "_reward"))
+        # collect available rewards (self._check_function_exists(rh, "_reward"))
+        for rep_name in self._blackboard.list_content():
+            rep_handler = self._blackboard.get(rep_name)
             if self._check_function_exists(rep_handler, "_reward"):
                 reward = rep_handler.get_component()._reward()
             else:
-                reward = 0 # default entry, will not contribute to any sum
+                reward = 0.0 # default entry, will not contribute to any sum
             if rep_name not in self._rewards_buffer:
                 self._rewards_buffer[rep_name] = []
             self._rewards_buffer[rep_name].append(reward)
+        
+        # add module-owned rewards
+        if self._check_function_exists(self._mod_handler, "_reward"):
+            reward = self._mod_handler.get_component()._reward(self.bb_view)
+        else:
+            reward = 0.0
+        mod_name = self._mod_handler.get_name()
+        if mod_name not in self._rewards_buffer:
+            self._rewards_buffer[mod_name] = []
+        self._rewards_buffer[mod_name].append(reward)
 
     def flush(self):
         rep_arrays = super().flush()  # shapes requires__, uses__, and provides__ buffers

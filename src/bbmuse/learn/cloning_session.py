@@ -111,8 +111,8 @@ class CloningSession:
         return loss_functions
 
     def run(self,
-        epochs: int = 100,
-        lr: float = 1e-4,
+        epochs: int = 20,
+        lr: float = 1e-3,
         batch_size: int = 512,
         fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = None,
@@ -146,7 +146,7 @@ class CloningSession:
 
         input_keys = list(inputs.keys())
         target_keys = list(targets.keys())
-        dataset = TensorDataset(*inputs.values(), *targets.values())
+        dataset = TensorDataset(*inputs.values(), *targets.values()) # TODO: do this manually without torch loaders. Copy from sculpt_session
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
         logger.info("Starting training for %s epochs.", epochs)
@@ -180,10 +180,11 @@ class CloningSession:
                     pbar.set_description(f"epoch={epoch:04d} loss={epoch_loss:.6f}")
                 
                 # save checkpoints
-                if not self.dry_run and checkpoint_interval and epochs % checkpoint_interval == 0:
-                    ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
-                    ckpt = Checkpoint(ckpt_path)
-                    ckpt.save(self.clone_model, epoch, epoch_loss, optimizer)
+                if not self.dry_run:
+                    if checkpoint_interval and epochs % checkpoint_interval == 0:
+                        ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
+                        ckpt = Checkpoint(ckpt_path)
+                        ckpt.save(self.clone_model, epoch, epoch_loss, optimizer)
                     session_logger.write_to_disk(curr_run_dir)
 
         if not self.dry_run:

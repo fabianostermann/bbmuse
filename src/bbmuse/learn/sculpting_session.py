@@ -66,9 +66,10 @@ class SculptingSession:
     def run(self,
         num_updates: int = 100,
         epochs: int = 10,
-        lr: float = 1e-4,
-        entropy_coef = 0.0,  # tunable, start small
-        bc_coef = 0.99,  # tunable, start small
+        lr: float = 1e-3,
+        batch_size: int = 512,
+        entropy_coef = 0.1,
+        bc_coef = 0.1,
         fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = None,
     ) -> None:
@@ -95,7 +96,9 @@ class SculptingSession:
 
                     # collect trajectories with current policy
                     trajectories = self.collect(self.policy_model, self.project, self.prober)
-                    advantages = self.compute_advantages(trajectories)
+                    advantages, mean_reward = self.compute_advantages(trajectories)
+
+                    session_logger.log({"mean_reward": mean_reward})
 
                     # extract what we need once, outside the loop
                     states = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('requires__') or k.startswith('uses__')}
@@ -108,64 +111,83 @@ class SculptingSession:
                     self.policy_model.train()
 
                     logger.debug("Train policy model (learning phase)..")
+
+                    T = next(iter(states.values())).shape[0]
                     for epoch in range(epochs):
-                        # recompute log probs of OLD actions under CURRENT policy
-                        new_log_probs, entropies = self.policy_model.log_prob_with_entropy(states, actions)
-                        pred_actions = self.policy_model(states) # TODO remove duplicate forward call
+                        indices = torch.randperm(T, device=self.device)
 
-                        total_loss = 0.0
+                        epoch_loss = 0.0
 
-                        for head_name in new_log_probs.keys():
-                            A = advantages[head_name]
-                            old_lp = old_log_probs[head_name]
-                            new_lp = new_log_probs[head_name]
+                        for batch_start in range(0, T, batch_size):
+                            idx = indices[batch_start:batch_start+batch_size]
 
-                            # importance ratio in log space for numerical stability
-                            r = torch.exp(new_lp - old_lp)
+                            batch_states     = {k: v[idx] for k, v in states.items()}
+                            batch_old_lp     = {k: v[idx] for k, v in old_log_probs.items()}
+                            batch_actions    = {k: v[idx] for k, v in actions.items()}
+                            batch_oracle     = {k: v[idx] for k, v in oracled_actions.items()}
+                            batch_advantages = {k: v[idx] for k, v in advantages.items()}
 
-                            # PPO clip loss
-                            eps = 0.2
-                            clipped = torch.clamp(r, 1 - eps, 1 + eps)
-                            policy_loss = -torch.mean(torch.min(r * A, clipped * A))
+                            # recompute log probs of OLD actions under CURRENT policy
+                            new_log_probs, entropies = self.policy_model.log_prob_with_entropy(batch_states, batch_actions)
+                            pred_actions = self.policy_model(batch_states) # TODO remove duplicate forward call
 
-                            # entropy loss
-                            entropy_loss = -torch.mean(entropies[head_name])  # negative because we want to maximize entropy
-                            
-                            # BC loss
-                            bc_pred = pred_actions[head_name]           # what policy did
-                            bc_target = oracled_actions[head_name] # what original module did
-                            bc_loss = loss_functions[head_name](bc_pred, bc_target)
-                            
-                            loss_contribution = sum([
-                                policy_loss,
-                                entropy_coef * entropy_loss,
-                                bc_coef * bc_loss,
-                            ]) / len(new_log_probs) # important because decouples task count from hyperparameter tuning
+                            batch_loss = 0.0
 
-                            print("policy_loss", policy_loss)
+                            for head_name in new_log_probs.keys():
+                                A = batch_advantages[head_name]
+                                old_lp = batch_old_lp[head_name]
+                                new_lp = new_log_probs[head_name]
 
-                            session_logger.log({f"loss__{head_name}": loss_contribution})
+                                # importance ratio in log space for numerical stability
+                                r = torch.exp(new_lp - old_lp)
 
-                            total_loss += loss_contribution
+                                # PPO clip loss
+                                eps = 0.2
+                                clipped = torch.clamp(r, 1 - eps, 1 + eps)
+                                policy_loss = -torch.mean(torch.min(r * A, clipped * A))
 
-                        optimizer.zero_grad()
-                        total_loss.backward()  # one backward through the full shared graph
-                        optimizer.step()
+                                # entropy loss
+                                entropy_loss = -torch.mean(entropies[head_name])  # negative because we want to maximize entropy
+                                
+                                # BC loss
+                                bc_pred = pred_actions[head_name]           # what policy did
+                                bc_target = batch_oracle[head_name] # what original module did
+                                bc_loss = loss_functions[head_name](bc_pred, bc_target)
+                                
+                                loss_contribution = sum([
+                                    policy_loss,
+                                    entropy_coef * entropy_loss,
+                                    bc_coef * bc_loss,
+                                ]) / len(new_log_probs) # important because decouples task count from hyperparameter tuning
+
+                                print("policy_loss", policy_loss)
+
+                                batch_loss += loss_contribution
+
+                            optimizer.zero_grad()
+                            batch_loss.backward()  # one backward through the full shared graph
+                            optimizer.step()
+
+                            epoch_loss += batch_loss
+
+                        epoch_loss /= len(indices)
 
                     session_logger.log({
                         "num_updates": num_updates,
-                        "total_loss": total_loss,
+                        "last_epoch_loss": epoch_loss,
                     }).step()
 
-                    desc = f"num_updates={num_updates:04d} loss={total_loss:.6f}"
+                    desc = f"num_updates={num_updates:04d} loss={epoch_loss:.6f}"
                     pbar.set_description(desc)
 
                 # save policy checkpoints every 10 num_updates (default)
-                if not self.dry_run and checkpoint_interval and num_updates % checkpoint_interval == 0:
-                    # TODO checkpoints do not handle PolicyModel objects yet. Make it so!
-                    #ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
-                    #ckpt = Checkpoint(ckpt_path)
-                    #ckpt.save(self.policy_model, num_updates, loss, optimizer)
+                if not self.dry_run:
+                    if checkpoint_interval and num_updates % checkpoint_interval == 0:
+                        pass
+                        # TODO checkpoints do not handle PolicyModel objects yet. Make it so!
+                        #ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
+                        #ckpt = Checkpoint(ckpt_path)
+                        #ckpt.save(self.policy_model, num_updates, loss, optimizer)
                     session_logger.write_to_disk(curr_run_dir)
 
         if not self.dry_run:
@@ -178,7 +200,7 @@ class SculptingSession:
         # run policy -> collect episodes
         policy_model.eval() # deactivate dropout, BatchNorm etc.
         with torch.no_grad():
-            env.run(quit_after=3, run_mode=0)
+            env.run(quit_after=1, run_mode=0)
 
         trajectories = prober.flush()
         return trajectories
@@ -189,10 +211,13 @@ class SculptingSession:
         advantages = {}
 
         reward_keys = [k for k in trajectories.keys() if k.startswith('rewards__')]
+        mean_rewards = []
 
         for reward_key in reward_keys:
             head = reward_key.split('__')[1]  # e.g. 'ProvRep'
             rewards = trajectories[reward_key]  # shape: (T,)
+
+            mean_rewards.append(rewards.mean())
 
             T = len(rewards)
             returns = torch.zeros(T, device=rewards.device)
@@ -202,7 +227,8 @@ class SculptingSession:
                 G = rewards[t] + discount_factor * G
                 returns[t] = G
 
-            #returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
             advantages[f'{head}'] = returns
 
-        return advantages
+        mean_reward = sum(mean_rewards) / len(reward_keys)
+        return advantages, mean_reward
