@@ -70,7 +70,7 @@ class SculptingSession:
         num_updates: int = 100,
         epochs: int = 10,
         lr: float = 1e-3,
-        batch_size: int = 512,
+        batch_size: int = 256,
         entropy_coef = 0.1,
         bc_coef = 0.1,
         fallback_loss_function = F.mse_loss,
@@ -118,6 +118,7 @@ class SculptingSession:
                         indices = torch.randperm(T, device=self.device)
 
                         epoch_loss = 0.0
+                        epoch_entropy = []
 
                         for batch_start in range(0, T, batch_size):
                             idx = indices[batch_start:batch_start+batch_size]
@@ -133,6 +134,7 @@ class SculptingSession:
                             pred_actions = self.policy_model(batch_states) # TODO remove duplicate forward call
 
                             batch_loss = 0.0
+                            batch_entropy = 0.0
 
                             for head_name in new_log_probs.keys():
                                 A = batch_advantages[head_name]
@@ -148,7 +150,8 @@ class SculptingSession:
                                 policy_loss = -torch.mean(torch.min(r * A, clipped * A))
 
                                 # entropy loss
-                                entropy_loss = -torch.mean(entropies[head_name])  # negative because we want to maximize entropy
+                                entropy = torch.mean(entropies[head_name])  # negative because we want to maximize entropy
+                                epoch_entropy.append(entropy)
                                 
                                 # BC loss
                                 bc_pred = pred_actions[head_name]           # what policy did
@@ -157,11 +160,9 @@ class SculptingSession:
                                 
                                 loss_contribution = sum([
                                     policy_loss,
-                                    entropy_coef * entropy_loss,
+                                    entropy_coef * -entropy,
                                     bc_coef * bc_loss,
                                 ]) / len(new_log_probs) # important because decouples task count from hyperparameter tuning
-
-                                print("policy_loss", policy_loss)
 
                                 batch_loss += loss_contribution
 
@@ -169,13 +170,13 @@ class SculptingSession:
                             batch_loss.backward()  # one backward through the full shared graph
                             optimizer.step()
 
-                            epoch_loss += batch_loss
+                            epoch_loss += batch_loss / len(indices)
 
-                        epoch_loss /= len(indices)
-
+                    print("ent:",epoch_entropy, len(indices))
                     session_logger.log({
                         "num_updates": num_updates,
                         "last_epoch_loss": epoch_loss,
+                        "entropy": sum(epoch_entropy)/len(epoch_entropy),
                         "walltime": time()-start_walltime,
                     }).step()
 
@@ -202,7 +203,7 @@ class SculptingSession:
         # run policy -> collect episodes
         policy_model.eval() # deactivate dropout, BatchNorm etc.
         with torch.no_grad():
-            env.run(quit_after=1, run_mode=0)
+            env.run(quit_after=3, run_mode=0)
 
         trajectories = prober.flush()
         return trajectories
