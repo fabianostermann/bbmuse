@@ -123,9 +123,6 @@ class CloningSession:
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_clone_run_dir(self.module_handler)
 
-        if checkpoint_interval is None and epochs > 0:
-            checkpoint_interval = epochs // 10
-
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
         self.clone_model.to(self.device)

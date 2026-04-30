@@ -80,9 +80,6 @@ class SculptingSession:
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler)
 
-        if checkpoint_interval is None and num_updates > 0:
-            checkpoint_interval = num_updates // 10 # default: 10 checkpoints per training run
-
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
         self.policy_model.to(self.device)
