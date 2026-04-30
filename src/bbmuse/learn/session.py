@@ -48,7 +48,7 @@ class Session():
         from bbmuse.learn.cloning_session import CloningSession
         cs = CloningSession(self.project, self.module_manager, device=device)
         cs.build(args)
-        cs.run()
+        cs.run(epochs=args.epochs) # TODO build smart parameter loader (config file? also a formatted command-line option?)
 
     def sculpt(self, args):
         device = self.get_desired_torch_device(args.device)

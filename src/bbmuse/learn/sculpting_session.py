@@ -34,6 +34,7 @@ class SculptingSession:
             logger.error("Module handler not found: %s", args.module[0])
             sys.exit(1)
 
+        self.tag = args.tag
         self.dry_run = args.dry_run
 
         # load clone from disk
@@ -78,7 +79,7 @@ class SculptingSession:
         
         # init run & checkpoint directory
         if not self.dry_run:
-            curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler)
+            curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler, self.tag)
 
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 

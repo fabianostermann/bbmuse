@@ -75,7 +75,7 @@ class ModuleManager():
         episodes_dir.mkdir(parents=True, exist_ok=True)
         return episodes_dir
 
-    def get_next_episode_path(self, module_handler):
+    def get_next_episode_path(self, module_handler, tag=None):
         existing = self.get_available_episode_paths(module_handler)
         if existing:
             last_number = int(existing[-1].stem)
@@ -83,7 +83,8 @@ class ModuleManager():
         else:
             next_number = 1
     
-        return self.get_episodes_dir(module_handler) / f"{next_number:03d}.npz"
+        tag = f"_{tag}" if tag else ""
+        return self.get_episodes_dir(module_handler) / f"{next_number:03d}{tag}.npz"
 
     def get_available_episode_paths(self, module_handler):
         episodes_dir = self.get_episodes_dir(module_handler)
@@ -94,7 +95,7 @@ class ModuleManager():
         clones_dir.mkdir(parents=True, exist_ok=True)
         return clones_dir
 
-    def create_next_clone_run_dir(self, module_handler):
+    def create_next_clone_run_dir(self, module_handler, tag=None):
         existing = self.get_available_clone_run_dirs(module_handler)
         if existing:
             last_number = int(existing[-1].stem)
@@ -102,7 +103,8 @@ class ModuleManager():
         else:
             next_number = 1
     
-        next_clone_run_dir = self.get_clones_dir(module_handler) / f"{next_number:03d}"
+        tag = f"_{tag}" if tag else ""
+        next_clone_run_dir = self.get_clones_dir(module_handler) / f"{next_number:03d}{tag}"
         next_clone_run_dir.mkdir(parents=False, exist_ok=False)
         return next_clone_run_dir
 
@@ -115,7 +117,7 @@ class ModuleManager():
         sculpts_dir.mkdir(parents=True, exist_ok=True)
         return sculpts_dir
 
-    def create_next_sculpt_run_dir(self, module_handler):
+    def create_next_sculpt_run_dir(self, module_handler, tag=None):
         existing = self.get_available_sculpt_run_dirs(module_handler)
         if existing:
             last_number = int(existing[-1].stem)
@@ -123,7 +125,8 @@ class ModuleManager():
         else:
             next_number = 1
     
-        next_sculpt_run_dir = self.get_sculpts_dir(module_handler) / f"{next_number:03d}"
+        tag = f"_{tag}" if tag else ""
+        next_sculpt_run_dir = self.get_sculpts_dir(module_handler) / f"{next_number:03d}{tag}"
         next_sculpt_run_dir.mkdir(parents=False, exist_ok=False)
         return next_sculpt_run_dir
 
