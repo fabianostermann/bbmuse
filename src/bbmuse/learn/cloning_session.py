@@ -206,6 +206,6 @@ class CloningSession:
         
 
     def _DEBUG_ONLY_accuracy(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        pc_correct  = pred[:, :12].argmax(-1) == target[:, :12].argmax(-1)
-        oct_correct = pred[:, 12:].argmax(-1) == target[:, 12:].argmax(-1)
-        return (pc_correct & oct_correct).float().mean()
+        #pc_correct  = pred[:, :12].argmax(-1) == target[:, :12].argmax(-1)
+        #oct_correct = pred[:, 12:].argmax(-1) == target[:, 12:].argmax(-1)
+        return 0.0 #(pc_correct & oct_correct).float().mean(

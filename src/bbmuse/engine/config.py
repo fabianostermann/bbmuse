@@ -21,7 +21,8 @@ class Config(dict):
                 },
                 "bblearn": {
                     "work": ".bblearn/",
-                    "backbones": "backbones/"
+                    "backbones": "backbones/",
+                    "rewards": "rewards/",
                 }
             }
         )

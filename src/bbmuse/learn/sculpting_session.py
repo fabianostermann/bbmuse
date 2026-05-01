@@ -22,6 +22,7 @@ from bbmuse.learn.checkpoint import Checkpoint
 from bbmuse.learn.policy_prober import PolicyProber
 from bbmuse.learn.policy_model import PolicyModel
 from bbmuse.learn.session_logger import SessionLogger
+from bbmuse.learn.reward import Reward
 
 class SculptingSession:
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
@@ -46,8 +47,17 @@ class SculptingSession:
         self.policy_model = PolicyModel(clone_model)
         logger.info("Loaded model from: %s", clone_final_path)
 
+        reward_fpaths = self.module_manager.get_available_rewards_filepaths()
+        self.rewards = []
+        for path in reward_fpaths:
+            try:
+                reward = Reward(path)
+                self.rewards.append(reward)
+            except Exception:
+                logger.exception("Ignored reward at: %s", path)
+
         # make module prober
-        self.prober = PolicyProber(self.policy_model, self.module_handler, self.project.get_blackboard())
+        self.prober = PolicyProber(self.policy_model, self.module_handler, self.project.get_blackboard(), self.rewards)
         self.prober.activate_listen()
 
 
@@ -138,7 +148,7 @@ class SculptingSession:
                             batch_entropy = 0.0
 
                             for head_name in new_log_probs.keys():
-                                A = batch_advantages[head_name]
+                                A = batch_advantages[head_name] # TODO advantages are for all heads!
                                 old_lp = batch_old_lp[head_name]
                                 new_lp = new_log_probs[head_name]
 

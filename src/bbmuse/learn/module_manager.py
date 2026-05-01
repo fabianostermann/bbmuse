@@ -20,6 +20,9 @@ class ModuleManager():
         
         self._backbones_dir = Path(self.project.config["bblearn"]["backbones"])
         self._backbones_dir.mkdir(parents=True, exist_ok=True)
+        
+        self._rewards_dir = Path(self.project.config["bblearn"]["rewards"])
+        self._rewards_dir.mkdir(parents=True, exist_ok=True)
 
         logger.debug("Working dir set to: %s", self._working_dir)
 
@@ -146,6 +149,12 @@ class ModuleManager():
 
     def get_backbones_dir(self):
         return self._backbones_dir
+
+    def get_rewards_dir(self):
+        return self._rewards_dir
+
+    def get_available_rewards_filepaths(self):
+        return list(self.get_rewards_dir().glob("*.py"))
 
     def is_armed(self, module_handler):
         mod_dir = self.get_module_dir(module_handler)

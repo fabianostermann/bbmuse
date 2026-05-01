@@ -7,14 +7,16 @@ import torch
 
 from bbmuse.engine.module_handler import ModuleHandler
 from bbmuse.engine.blackboard import Blackboard
+from bbmuse.learn.reward import Reward
 
 from bbmuse.learn.module_listener import ModuleListener
 from bbmuse.learn.policy_model import PolicyModel
 
 class PolicyProber(ModuleListener):
 
-    def __init__(self, policy_model: PolicyModel, mod_handler: ModuleHandler, blackboard: Blackboard):
+    def __init__(self, policy_model: PolicyModel, mod_handler: ModuleHandler, blackboard: Blackboard, rewards: Reward):
         super().__init__(mod_handler, blackboard)
+        self.rewards = rewards
 
         self.policy_model = policy_model
         self.device = next(policy_model.parameters()).device
@@ -68,21 +70,13 @@ class PolicyProber(ModuleListener):
             rep_handler.get_component()._unpack(last_actions[rep_name])
             
         # collect available rewards (self._check_function_exists(rh, "_reward"))
-        for rep_name in self._blackboard.list_content():
-            rep_handler = self._blackboard.get(rep_name)
-            if self._check_function_exists(rep_handler, "_reward"):
-                reward = rep_handler.get_component()._reward()
-                if rep_name not in self._rewards_buffer:
-                    self._rewards_buffer[rep_name] = []
-                self._rewards_buffer[rep_name].append(reward)
-        
-        # add module-owned rewards
-        if self._check_function_exists(self._mod_handler, "_reward"):
-            reward = self._mod_handler.get_component()._reward(self.bb_view)
-            mod_name = self._mod_handler.get_name()
-            if mod_name not in self._rewards_buffer:
-                self._rewards_buffer[mod_name] = []
-            self._rewards_buffer[mod_name].append(reward)
+        for reward in self.rewards:
+            name = reward.get_name()
+            reward_value = reward.call_reward(self.bb_view)
+            if name not in self._rewards_buffer:
+                self._rewards_buffer[name] = []
+            self._rewards_buffer[name].append(reward_value)
+            print("??", self._rewards_buffer)
 
     def flush(self):
         rep_arrays = super().flush()  # shapes requires__, uses__, and provides__ buffers
@@ -110,6 +104,8 @@ class PolicyProber(ModuleListener):
             f"rewards__{k}": torch.as_tensor(v, dtype=torch.float32, device=self.device)
             for k, v in self._rewards_buffer.items()
         }
+
+        print(rep_arrays)
 
         assert len(set([v.shape[0] for v in rep_arrays.values()])) == 1,\
             "Episode lengths do not match."
