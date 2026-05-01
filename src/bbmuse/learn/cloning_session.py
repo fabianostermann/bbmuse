@@ -114,7 +114,7 @@ class CloningSession:
         return loss_functions
 
     def run(self,
-        epochs: int = 20,
+        epochs: int = 7,
         lr: float = 1e-3,
         batch_size: int = 512,
         fallback_loss_function = F.mse_loss,

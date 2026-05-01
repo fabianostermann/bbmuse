@@ -67,12 +67,12 @@ class SculptingSession:
         return loss_functions
 
     def run(self,
-        num_updates: int = 100,
+        num_updates: int = 50,
         epochs: int = 10,
         lr: float = 1e-3,
         batch_size: int = 256,
-        entropy_coef = 0.1,
-        bc_coef = 0.1,
+        entropy_coef = 0.0,
+        bc_coef = 1.0,
         fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = None,
     ) -> None:
@@ -119,6 +119,7 @@ class SculptingSession:
 
                         epoch_loss = 0.0
                         epoch_entropy = []
+                        epoch_bc_loss = []
 
                         for batch_start in range(0, T, batch_size):
                             idx = indices[batch_start:batch_start+batch_size]
@@ -157,6 +158,7 @@ class SculptingSession:
                                 bc_pred = pred_actions[head_name]           # what policy did
                                 bc_target = batch_oracle[head_name] # what original module did
                                 bc_loss = loss_functions[head_name](bc_pred, bc_target)
+                                epoch_bc_loss.append(bc_loss)
                                 
                                 loss_contribution = sum([
                                     policy_loss,
@@ -172,11 +174,11 @@ class SculptingSession:
 
                             epoch_loss += batch_loss / len(indices)
 
-                    print("ent:",epoch_entropy, len(indices))
                     session_logger.log({
                         "num_updates": num_updates,
                         "last_epoch_loss": epoch_loss,
                         "entropy": sum(epoch_entropy)/len(epoch_entropy),
+                        "bc_loss": sum(epoch_bc_loss)/len(epoch_bc_loss),
                         "walltime": time()-start_walltime,
                     }).step()
 
@@ -203,7 +205,7 @@ class SculptingSession:
         # run policy -> collect episodes
         policy_model.eval() # deactivate dropout, BatchNorm etc.
         with torch.no_grad():
-            env.run(quit_after=3, run_mode=0)
+            env.run(quit_after=2, run_mode=0)
 
         trajectories = prober.flush()
         return trajectories
@@ -230,7 +232,7 @@ class SculptingSession:
                 G = rewards[t] + discount_factor * G
                 returns[t] = G
 
-            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8) # normalize returns
             advantages[f'{head}'] = returns
 
         mean_reward = sum(mean_rewards) / len(reward_keys)
