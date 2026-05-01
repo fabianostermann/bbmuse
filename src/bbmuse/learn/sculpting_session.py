@@ -55,6 +55,8 @@ class SculptingSession:
                 self.rewards.append(reward)
             except Exception:
                 logger.exception("Ignored reward at: %s", path)
+        if not self.rewards:
+            logger.warning("No reward functions in place.")
 
         # make module prober
         self.prober = PolicyProber(self.policy_model, self.module_handler, self.project.get_blackboard(), self.rewards)
@@ -107,9 +109,10 @@ class SculptingSession:
 
                     # collect trajectories with current policy
                     trajectories = self.collect(self.policy_model, self.project, self.prober)
-                    advantages, mean_reward = self.compute_advantages(trajectories)
+                    advantages, named_returns = self.compute_advantages(trajectories)
+                    mean_returns = {f"rew_{name}": v.mean().item() for name, v in named_returns.items()}
 
-                    session_logger.log({"mean_reward": mean_reward})
+                    session_logger.log(mean_returns)
 
                     # extract what we need once, outside the loop
                     states = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('requires__') or k.startswith('uses__')}
@@ -128,6 +131,7 @@ class SculptingSession:
                         indices = torch.randperm(T, device=self.device)
 
                         epoch_loss = 0.0
+                        epoch_policy_loss = []
                         epoch_entropy = []
                         epoch_bc_loss = []
 
@@ -138,27 +142,30 @@ class SculptingSession:
                             batch_old_lp     = {k: v[idx] for k, v in old_log_probs.items()}
                             batch_actions    = {k: v[idx] for k, v in actions.items()}
                             batch_oracle     = {k: v[idx] for k, v in oracled_actions.items()}
-                            batch_advantages = {k: v[idx] for k, v in advantages.items()}
+                            batch_advantages = advantages[idx] if not advantages is None else None
 
                             # recompute log probs of OLD actions under CURRENT policy
                             new_log_probs, entropies = self.policy_model.log_prob_with_entropy(batch_states, batch_actions)
                             pred_actions = self.policy_model(batch_states) # TODO remove duplicate forward call
 
                             batch_loss = 0.0
-                            batch_entropy = 0.0
 
                             for head_name in new_log_probs.keys():
-                                A = batch_advantages[head_name] # TODO advantages are for all heads!
-                                old_lp = batch_old_lp[head_name]
-                                new_lp = new_log_probs[head_name]
 
-                                # importance ratio in log space for numerical stability
-                                r = torch.exp(new_lp - old_lp)
+                                policy_loss = 0.0
+                                if not batch_advantages is None:
+                                    A = batch_advantages
+                                    old_lp = batch_old_lp[head_name]
+                                    new_lp = new_log_probs[head_name]
 
-                                # PPO clip loss
-                                eps = 0.2
-                                clipped = torch.clamp(r, 1 - eps, 1 + eps)
-                                policy_loss = -torch.mean(torch.min(r * A, clipped * A))
+                                    # importance ratio in log space for numerical stability
+                                    r = torch.exp(new_lp - old_lp)
+
+                                    # PPO clip loss
+                                    eps = 0.2
+                                    clipped = torch.clamp(r, 1 - eps, 1 + eps)
+                                    policy_loss = -torch.mean(torch.min(r * A, clipped * A))
+                                epoch_policy_loss.append(policy_loss)
 
                                 # entropy loss
                                 entropy = torch.mean(entropies[head_name])  # negative because we want to maximize entropy
@@ -186,7 +193,8 @@ class SculptingSession:
 
                     session_logger.log({
                         "num_updates": num_updates,
-                        "last_epoch_loss": epoch_loss,
+                        "weighted_loss": epoch_loss,
+                        "policy_loss": sum(epoch_policy_loss)/len(epoch_policy_loss),
                         "entropy": sum(epoch_entropy)/len(epoch_entropy),
                         "bc_loss": sum(epoch_bc_loss)/len(epoch_bc_loss),
                         "walltime": time()-start_walltime,
@@ -220,30 +228,31 @@ class SculptingSession:
         trajectories = prober.flush()
         return trajectories
 
-    def compute_advantages(self, trajectories, discount_factor = 0.99, gae_lambda = 0.95):
+    def compute_advantages(self, trajectories, discount_factor=0.99): # gae_lambda = 0.95):
         # TODO extend advantage calculation to PPO standard: Critic with loss + GAE
         # TODO: truncated GAE (we have endless episodes)
-        advantages = {}
-
         reward_keys = [k for k in trajectories.keys() if k.startswith('rewards__')]
-        mean_rewards = []
 
-        for reward_key in reward_keys:
-            head = reward_key.split('__')[1]  # e.g. 'ProvRep'
-            rewards = trajectories[reward_key]  # shape: (T,)
+        # Named raw rewards for external aggregation/logging
+        named_returns = {k.split('__')[1]: trajectories[k] for k in reward_keys}
 
-            mean_rewards.append(rewards.mean())
+        if not named_returns:
+            logger.warning("Received no rewards.")
+            return None, {}
 
-            T = len(rewards)
-            returns = torch.zeros(T, device=rewards.device)
+        # Average across all rewards into a single signal
+        stacked_rewards = torch.stack([trajectories[k] for k in reward_keys], dim=0)
+        combined_rewards = stacked_rewards.mean(dim=0)  # shape: (T,)
 
-            G = 0.0
-            for t in reversed(range(T)):
-                G = rewards[t] + discount_factor * G
-                returns[t] = G
+        # Compute discounted returns
+        T = len(combined_rewards)
+        returns = torch.zeros(T, device=combined_rewards.device)
+        G = 0.0
+        for t in reversed(range(T)):
+            G = combined_rewards[t] + discount_factor * G
+            returns[t] = G
 
-            returns = (returns - returns.mean()) / (returns.std() + 1e-8) # normalize returns
-            advantages[f'{head}'] = returns
+        # Normalize
+        returns = (returns - returns.mean()) / (returns.std() + 1e-8) # normalize
 
-        mean_reward = sum(mean_rewards) / len(reward_keys)
-        return advantages, mean_reward
+        return returns, named_returns

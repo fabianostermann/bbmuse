@@ -76,7 +76,6 @@ class PolicyProber(ModuleListener):
             if name not in self._rewards_buffer:
                 self._rewards_buffer[name] = []
             self._rewards_buffer[name].append(reward_value)
-            print("??", self._rewards_buffer)
 
     def flush(self):
         rep_arrays = super().flush()  # shapes requires__, uses__, and provides__ buffers
@@ -104,8 +103,6 @@ class PolicyProber(ModuleListener):
             f"rewards__{k}": torch.as_tensor(v, dtype=torch.float32, device=self.device)
             for k, v in self._rewards_buffer.items()
         }
-
-        print(rep_arrays)
 
         assert len(set([v.shape[0] for v in rep_arrays.values()])) == 1,\
             "Episode lengths do not match."

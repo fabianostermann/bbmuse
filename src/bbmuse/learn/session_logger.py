@@ -27,6 +27,8 @@ class SessionLogger:
         for k, v in record_dict.items():
             if isinstance(v, Tensor):
                 record_dict[k] = v.item()
+            if type(v) is float:
+                record_dict[k] = round(v, 5)
 
         self.current_step.update(record_dict)
         return self
@@ -44,7 +46,6 @@ class SessionLogger:
             df.to_csv(filepath, index=False)
         else:
             try:
-                logger.exception("Got a problem")
                 filepath = Path(run_directory) / "metrics.pkl"
                 with open(filepath, 'wb') as f:
                     pickle.dump(self.history, f)

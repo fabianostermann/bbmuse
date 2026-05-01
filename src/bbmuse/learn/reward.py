@@ -1,6 +1,9 @@
+import logging
+
 import importlib.util
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 
 class Reward:
     def __init__(self, reward_filepath: str | Path):
@@ -31,7 +34,11 @@ class Reward:
         return module
 
     def call_reward(self, bb):
-        return self.module._reward(bb)
+        try:
+            return self.module._reward(bb)
+        except Exception:
+            logger.exception("Reward function %s produced an error. Skipping.")
+            return 0.0
 
     def get_name(self):
         return self.name
