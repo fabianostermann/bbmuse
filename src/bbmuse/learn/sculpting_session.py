@@ -243,7 +243,7 @@ class SculptingSession:
             return None, {}
 
         # Average across all rewards into a single signal
-        stacked_rewards = torch.stack([trajectories[k] for k in reward_keys], dim=0)
+        stacked_rewards = torch.stack([trajectories[k] for k in reward_keys if k != "rewards__accuracy"], dim=0) # TODO: remove DEBUG accuracy feature
         combined_rewards = stacked_rewards.mean(dim=0)  # shape: (T,)
 
         # Compute discounted returns
