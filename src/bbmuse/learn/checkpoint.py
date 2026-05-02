@@ -47,7 +47,7 @@ class Checkpoint:
     def load(self):
         if not self.path.exists():
             logger.error("Path does not exists: %s", self.path)
-            raise FileNotFoundError(path)
+            raise FileNotFoundError(self.path)
 
         self._data = torch.load(self.path, weights_only=False, map_location=self.device)
         logger.debug("Checkpoint loaded from disk: %s", self.path)

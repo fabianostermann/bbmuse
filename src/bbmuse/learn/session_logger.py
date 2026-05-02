@@ -1,6 +1,7 @@
 import logging
 
 from pathlib import Path
+import json
 
 import pickle
 from torch import Tensor
@@ -15,9 +16,11 @@ except Exception:
 
 class SessionLogger:
 
-    def __init__(self):
+    def __init__(self, run_directory):
         if not pd:
             logger.warning("pandas not available. Falling back to pickling.")
+
+        self.run_directory = Path(run_directory)
 
         self.history = []
         self.current_step = {}
@@ -38,15 +41,18 @@ class SessionLogger:
         self.history.append(self.current_step)
         self.current_step = {}
 
-    def write_to_disk(self, run_directory):
+    def write_to_disk(self):
+        if not self.run_directory:
+            return
+
         """Write session history to disk."""
         if pd:
-            filepath = Path(run_directory) / "metrics.csv"
+            filepath = Path(self.run_directory) / "metrics.csv"
             df = pd.DataFrame(self.history)
             df.to_csv(filepath, index=False)
         else:
             try:
-                filepath = Path(run_directory) / "metrics.pkl"
+                filepath = Path(self.run_directory) / "metrics.pkl"
                 with open(filepath, 'wb') as f:
                     pickle.dump(self.history, f)
             except Exception:
@@ -54,6 +60,24 @@ class SessionLogger:
                 return
 
         logger.debug("Session log written to: %s", filepath)
-            
 
+    def _sanitize_dict_for_json(self, config_dict):
+        result = {}
+        for k, v in config_dict.items():
+            if callable(v):
+                result[k] = v.__name__
+            #elif v is None:
+            #    result[k] = None  # json handles None natively as null
+            else:
+                result[k] = v
+        return result
 
+    def write_config_to_disk(self, config_dict):
+        if not self.run_directory:
+            return
+
+        filepath = Path(self.run_directory) / "config.json"
+        sanitized = self._sanitize_dict_for_json(config_dict)
+
+        with open(filepath, "w") as f:
+            json.dump(sanitized, f, indent=2)

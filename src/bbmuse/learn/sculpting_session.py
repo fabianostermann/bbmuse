@@ -40,7 +40,7 @@ class SculptingSession:
         self.tag = args.tag
         self.dry_run = args.dry_run
 
-        # load clone from disk
+        # load clone from disk -- TODO: create mode that runs without BC model (init just a random model)
         clone_dirs = self.module_manager.get_available_clone_run_dirs(self.module_handler)
         clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
         clone_model = Checkpoint(clone_final_path, self.device).load().make_model()
@@ -88,12 +88,14 @@ class SculptingSession:
         fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = None,
     ) -> None:
-        
-        session_logger = SessionLogger()
-        
-        # init run & checkpoint directory
+        kwargs = {k: v for k, v in locals().items() if k != 'self'}
+
+        curr_run_dir = None
         if not self.dry_run:
             curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler, self.tag)
+        
+        session_logger = SessionLogger(curr_run_dir)
+        session_logger.write_config_to_disk(kwargs)
 
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
@@ -211,13 +213,13 @@ class SculptingSession:
                         #ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
                         #ckpt = Checkpoint(ckpt_path)
                         #ckpt.save(self.policy_model, num_updates, loss, optimizer)
-                    session_logger.write_to_disk(curr_run_dir)
+                    session_logger.write_to_disk()
 
         if not self.dry_run:
             #final_path = self.module_manager.get_final_model_path(curr_run_dir)
             #pt = Checkpoint(final_path)
             #pt.save(self.policy_model, num_updates, loss, optimizer)
-            session_logger.write_to_disk(curr_run_dir)
+            session_logger.write_to_disk()
         
     def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber):
         # run policy -> collect episodes
