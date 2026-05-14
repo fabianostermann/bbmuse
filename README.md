@@ -10,7 +10,7 @@ By adapting a modern blackboard architecture from real-time robotics, we create 
 
 - [<img src="https://upload.wikimedia.org/wikipedia/commons/2/2f/Github_Topicon.svg" alt="" height="24"/> GitHub repo](https://github.com/fabianostermann/bbmuse)
 
-- Templates and example projects will be released soon. Link will be provided here.
+- [Collection of templates and examples](https://github.com/fabianostermann/bbmuse-templates)
 
 - [<img src="https://icmc2026.ligeti-zentrum.de/wp-content/uploads/2026/04/icmc2026_logo_w-scaled.png" alt="ICMC 2026" height="24"/> conference paper](https://icmc2026.ligeti-zentrum.de/proceedings) presenting the main concept of BbMuse.
 
