@@ -43,7 +43,8 @@ class SculptingSession:
         # load clone from disk -- TODO: create mode that runs without BC model (init just a random model)
         clone_dirs = self.module_manager.get_available_clone_run_dirs(self.module_handler)
         clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
-        clone_model = Checkpoint(clone_final_path, self.device).load().make_model()
+        self.loaded_checkpoint = Checkpoint(clone_final_path, self.device).load()
+        clone_model = self.loaded_checkpoint.make_model()
         self.policy_model = PolicyModel(clone_model)
         logger.info("Loaded model from: %s", clone_final_path)
 
@@ -79,12 +80,12 @@ class SculptingSession:
         return loss_functions
 
     def run(self,
-        num_updates: int = 50,
+        num_updates: int = 200,
         epochs: int = 10,
         lr: float = 1e-3,
         batch_size: int = 256,
-        entropy_coef = 0.0,
-        bc_coef = 1.0,
+        entropy_coef = 0.001,
+        bc_coef = 0.01,
         fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = None,
     ) -> None:
@@ -95,7 +96,8 @@ class SculptingSession:
             curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler, self.tag)
         
         session_logger = SessionLogger(curr_run_dir)
-        session_logger.write_config_to_disk(kwargs)
+        clone_info = {"clone_info": {"clone_epochs": self.loaded_checkpoint.get_epoch(), "clone_loss": self.loaded_checkpoint.get_loss()}}
+        session_logger.write_config_to_disk( { "run_kwargs": kwargs } | clone_info)
 
         loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
 
@@ -244,6 +246,8 @@ class SculptingSession:
 
         # Average across all rewards into a single signal
         stacked_rewards = torch.stack([trajectories[k] for k in reward_keys if k != "rewards__accuracy"], dim=0) # TODO: remove DEBUG accuracy feature
+        # Normalize each reward signal over the episode length before combining
+        stacked_rewards = (stacked_rewards - stacked_rewards.mean(dim=1, keepdim=True)) / (stacked_rewards.std(dim=1, keepdim=True) + 1e-8)
         combined_rewards = stacked_rewards.mean(dim=0)  # shape: (T,)
 
         # Compute discounted returns
