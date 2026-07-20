@@ -105,6 +105,11 @@ class Controller:
                 sleep(0.5)
                 if quit_after >= 0 and time() - start_time > quit_after:
                     self.halt()
+                   
+                # check hot-reload for all representations
+                for rep in self.blackboard.list_content():
+                    self.blackboard.get(rep).consider_hot_reload()
+                    
                 for group in self.groups:
                     if not group.is_alive():
                         if run_mode <= 0:# NORMAL mode
