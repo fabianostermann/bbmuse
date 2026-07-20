@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 try:
     import pandas as pd
 except Exception:
-    pass
+    pd = None
 
 
 class SessionLogger:
