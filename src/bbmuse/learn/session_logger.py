@@ -64,10 +64,10 @@ class SessionLogger:
     def _sanitize_dict_for_json(self, config_dict):
         result = {}
         for k, v in config_dict.items():
-            if callable(v):
+            if isinstance(v, dict):
+                result[k] = self._sanitize_dict_for_json(v)  # recurse
+            elif callable(v):
                 result[k] = v.__name__
-            #elif v is None:
-            #    result[k] = None  # json handles None natively as null
             else:
                 result[k] = v
         return result
@@ -77,7 +77,7 @@ class SessionLogger:
             return
 
         filepath = Path(self.run_directory) / "config.json"
-        sanitized = self._sanitize_dict_for_json(config_dict)
+        config_dict = self._sanitize_dict_for_json(config_dict)
 
         with open(filepath, "w") as f:
-            json.dump(sanitized, f, indent=2)
+            json.dump(config_dict, f, indent=2)
