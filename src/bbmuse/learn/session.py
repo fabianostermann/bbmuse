@@ -59,10 +59,14 @@ class Session():
         cs.run()
 
     def apply(self, args):
-        logger.error("apply() is not implemented yet.")
+        from bbmuse.learn.apply_restore_session import ApplyRestoreSession
+        aps = ApplyRestoreSession(self.project, self.module_manager)
+        aps.apply(args)
 
     def restore(self, args):
-        logger.error("restore() is not implemented yet.")
+        from bbmuse.learn.apply_restore_session import ApplyRestoreSession
+        aps = ApplyRestoreSession(self.project, self.module_manager)
+        aps.restore(args)
 
     def get_desired_torch_device(self, device_name):
         import torch
