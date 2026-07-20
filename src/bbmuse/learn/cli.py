@@ -32,13 +32,13 @@ def process_args():
     
     subparsers = parser.add_subparsers(dest="command")
     
-    sub_enable = subparsers.add_parser("arm", help='TODO: remove this subparser and provide module list as argument to listen', parents=[common])
+    sub_enable = subparsers.add_parser("arm", help='To arm a module means it will be recorded during listening.', parents=[common])
     sub_enable.add_argument('modules', nargs="*", help="Path or name of modules")
     
-    sub_disable = subparsers.add_parser("disarm", help='TODO: remove this subparser and give module list as argument to listen', parents=[common])
+    sub_disable = subparsers.add_parser("disarm", help='To disarm a module means it will NOT be recorded during listening.', parents=[common])
     sub_disable.add_argument('modules', nargs="*", help="Path or name of modules")
     
-    sub_status = subparsers.add_parser("status", help='TODO write help', parents=[common])
+    sub_status = subparsers.add_parser("status", help='Prints a summary of available modules, records, and trained models.', parents=[common])
     sub_status.add_argument('modules', nargs='*', help="Path or name of modules. If none is given, prints a summary of all modules.")
     sub_status.add_argument('-s', "--short", action="store_true", help="Give the output in the short-format.")
     
@@ -61,10 +61,10 @@ def process_args():
     sub_sculpt.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
     sub_sculpt.add_argument("--tag", type=str, default=None, help="A string tag that is appended to the filepath.")
 
-    sub_apply = subparsers.add_parser("apply", help='TODO write help', parents=[common])
+    sub_apply = subparsers.add_parser("apply", help='Construct a BbMuse module file that wraps a neural model but runs as native BbMuse module.', parents=[common])
     sub_apply.add_argument('module', nargs=1, help="Path or name of a module")
     
-    sub_restore = subparsers.add_parser("restore", help='TODO write help', parents=[common])
+    sub_restore = subparsers.add_parser("restore", help='Restore the original module file from an applied one.', parents=[common])
     sub_restore.add_argument('module', nargs=1, help="Path or name of a module")
     
     #sub_restore = subparsers.add_parser("help")
