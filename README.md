@@ -12,9 +12,9 @@ By adapting a modern blackboard architecture from real-time robotics, we create 
 
 - [Collection of templates and examples](https://github.com/fabianostermann/bbmuse-templates)
 
-- [<img src="https://icmc2026.ligeti-zentrum.de/wp-content/uploads/2026/04/icmc2026_logo_w-scaled.png" alt="ICMC 2026" height="24"/> conference paper](https://icmc2026.ligeti-zentrum.de/proceedings) presenting the main concept of BbMuse.
+- [<img src="https://icmc2026.ligeti-zentrum.de/wp-content/uploads/2026/04/icmc2026_logo_w-scaled.png" alt="ICMC 2026" height="24"/> conference paper](https://icmc2026.ligeti-zentrum.de/proceedings) introducing BbMuse and its main concepts.
  
-- [<img src="https://aimusiccreativity.org/2025/images/logo_white_short.svg" alt="AIMC 2026" height="24"/> conference paper](https://aimc2026.org/home) presenting an AI extension called BbLearn.
+- [<img src="https://aimusiccreativity.org/2025/images/logo_white_short.svg" alt="AIMC 2026" height="24"/> conference paper](https://aimc2026.org/home) presenting BbLearn: an AI extension for BbMuse living in the same repo.
 
 ## Installation and first-run experience
 
