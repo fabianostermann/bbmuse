@@ -1,4 +1,8 @@
 #!/bin/bash
+set -e
+
+CONDA_ENV_NAME="bbmuse"
+RUN="conda run -n $CONDA_ENV_NAME --live-stream"
 
 echo "Is the LICENSE year correct?"
 grep "20" LICENSE
@@ -19,7 +23,11 @@ if [ "$REPLY" != "y" ]; then
 fi
 
 # Remove previous builds (cleaner)
-echo rm -rf dist build *.egg-info
+rm -rf dist build src/*.egg-info
+
+# Build the distribution (needs 'pip install build')
+$RUN python -m build
 
 # Following needs 'pip install twine'
-twine check dist/* && twine upload dist/*
+$RUN twine check dist/*
+$RUN twine upload dist/*
