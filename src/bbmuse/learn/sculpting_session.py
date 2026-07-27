@@ -245,7 +245,7 @@ class SculptingSession:
             return None, {}
 
         # Average across all rewards into a single signal
-        stacked_rewards = torch.stack([trajectories[k] for k in reward_keys if k != "rewards__accuracy"], dim=0) # TODO: remove DEBUG accuracy feature
+        stacked_rewards = torch.stack([trajectories[k] for k in reward_keys], dim=0)
         # Normalize each reward signal over the episode length before combining
         stacked_rewards = (stacked_rewards - stacked_rewards.mean(dim=1, keepdim=True)) / (stacked_rewards.std(dim=1, keepdim=True) + 1e-8)
         combined_rewards = stacked_rewards.mean(dim=0)  # shape: (T,)
