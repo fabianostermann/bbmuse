@@ -27,6 +27,8 @@ class Session():
         else:
             logger.error("Command '%s()' is unknown.", args.command)
 
+        self.module_manager.clean()
+
     def arm(self, args):
         self.module_manager.arm(args)
 
@@ -34,6 +36,7 @@ class Session():
         self.module_manager.disarm(args)
 
     def status(self, args):
+        self.module_manager.clean()
         self.module_manager.status(args)
 
     def listen(self, args):

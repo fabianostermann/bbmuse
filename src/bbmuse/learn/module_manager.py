@@ -231,3 +231,17 @@ class ModuleManager():
                 logger.info("└── %s sculpts: %s", len(avail_sculpts_names), ", ".join(avail_sculpts_names))
             else:
                 logger.info("└── no sculpts")
+
+    def clean(self):
+        """ Remove any empty subfolder in the bblearn modules directory """
+        modules_dir = Path(self._modules_dir)
+        if not modules_dir.exists():
+            return
+        self._remove_empty_dirs(modules_dir)
+
+    def _remove_empty_dirs(self, folder: Path):
+        for subfolder in folder.iterdir():
+            if subfolder.is_dir():
+                self._remove_empty_dirs(subfolder)
+        if not any(folder.iterdir()):
+            folder.rmdir()
