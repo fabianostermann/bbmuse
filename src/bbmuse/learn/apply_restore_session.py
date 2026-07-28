@@ -205,9 +205,12 @@ def _update(bb):
 
         outputs = _model(inputs)
 
-        # unpack predictions back onto the blackboard, dropping the batch dim again
         for name in PROVIDES:
-            getattr(bb, name)._unpack(outputs[name].squeeze(0))
+            nvec = _model.config["action_spaces"][name]
+            assert sum(nvec) == math.prod(_model.config["output_dims"][name])
+            segments = torch.split(outputs[name].squeeze(0), nvec, dim=-1)
+            action = torch.stack([s.argmax(-1) for s in segments], dim=-1)
+            getattr(bb, name)._unpack(action)
 
 
 def close():

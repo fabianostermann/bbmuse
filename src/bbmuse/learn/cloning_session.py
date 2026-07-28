@@ -8,7 +8,6 @@ from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 
 from typing import Dict
@@ -20,6 +19,7 @@ logger = logging.getLogger(__name__)
 from bbmuse.learn.module_clone import ModuleClone
 from bbmuse.learn.checkpoint import Checkpoint
 from bbmuse.learn.session_logger import SessionLogger
+from bbmuse.learn.action_spaces import make_ce_loss
 
 class CloningSession:
     def __init__(self, project, module_manager, device=torch.device("cpu")):
@@ -65,8 +65,9 @@ class CloningSession:
         # init network that will be used for behavior cloning
         input_dims_dict = {k: v[1:] for k, v in (shapes["uses"] | shapes["requires"]).items()}
         output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
+        action_spaces = self.get_action_spaces(self.module_handler)
         path_to_backbone = self.get_path_to_backbone(args.backbone)
-        self.clone_model = ModuleClone(input_dims_dict, output_dims_dict, path_to_backbone)
+        self.clone_model = ModuleClone(input_dims_dict, output_dims_dict, action_spaces, path_to_backbone)
 
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
@@ -88,6 +89,18 @@ class CloningSession:
 
         return episode
 
+    def get_action_spaces(self, mod_handler):
+        logger.info("Collect action spaces for target representations of module %s", mod_handler)
+        action_spaces = {}
+        for provided_rep_name in mod_handler.get_provides():
+            rh = self.blackboard.get(provided_rep_name)
+            ac_candidate = getattr(rh.get_component(), "_action_space", None)
+            assert all(isinstance(n, int) and n >= 2 for n in ac_candidate), "action space spec not found or not a valid list."
+
+            logger.debug("Found action space spec for %s.", rh)
+            action_spaces[provided_rep_name] = ac_candidate
+        return action_spaces
+
     def get_path_to_backbone(self, backbone_name: str | None):
         if backbone_name is None: 
             return None
@@ -98,26 +111,10 @@ class CloningSession:
         else:
             raise FileNotFoundError(f"Backbone file not found: {ptb}")
 
-    def load_loss_functions(self, mod_handler, fallback_loss_function):
-        logger.info("Load loss functions for target representations of module %s", mod_handler)
-        loss_functions = {}
-        for provided_rep_name in mod_handler.get_provides():
-            rh = self.blackboard.get(provided_rep_name)
-            loss_candidate = getattr(rh.get_component(), "_loss", None)
-            if loss_candidate and callable(loss_candidate):
-                logger.debug("Found custom loss function for %s.", rh)
-                loss_functions[provided_rep_name] = loss_candidate
-            else:
-                logger.debug("No custom loss function found for %s. Will fallback to: %s", rh, fallback_loss_function)
-                loss_functions[provided_rep_name] = fallback_loss_function
-
-        return loss_functions
-
     def run(self,
         epochs: int = 7,
         lr: float = 1e-3,
         batch_size: int = 512,
-        fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = None,
     ) -> None:
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
@@ -129,7 +126,8 @@ class CloningSession:
         session_logger = SessionLogger(curr_run_dir)
         session_logger.write_config_to_disk(kwargs)
 
-        loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
+        loss_functions = {name: make_ce_loss(nvec)
+            for name, nvec in self.clone_model.config["action_spaces"].items()}
 
         self.clone_model.to(self.device)
         self.clone_model.train()

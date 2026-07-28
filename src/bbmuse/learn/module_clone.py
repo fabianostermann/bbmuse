@@ -16,12 +16,22 @@ class ModuleClone(nn.Module):
         self,
         input_dims: Dict[str, Tuple[int, ...]],
         output_dims: Dict[str, Tuple[int, ...]],
+        action_spaces,
         path_to_backbone: str = None,
     ):
         super().__init__()
+
+        for name, out_dim in output_dims.items():
+            assert name in action_spaces, f"No action space declared for output '{name}'"
+            assert sum(action_spaces[name]) == math.prod(out_dim), (
+                f"{name}: action space {action_spaces[name]} sums to {sum(action_spaces[name])}, "
+                f"but output dims {out_dim} flatten to {math.prod(out_dim)}"
+            )
+
         self.config = {
             "input_dims": input_dims,
             "output_dims": output_dims,
+            "action_spaces": action_spaces,
             "path_to_backbone": path_to_backbone,
         }
 
@@ -99,9 +109,7 @@ class OutputHead(nn.Module):
 
         self.net = nn.Sequential(
             nn.Linear(in_dim, self.flat_out_dim)
-        )
-        # NOTICE: no activations are applied here (logits are numerically safer),
-        #         -> apply custom activations inside _loss() and _unpack()
+        ) # no activations are applied (logits are numerically safer)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.net(x)
@@ -132,7 +140,7 @@ class BackboneWrapper(nn.Module):
 
     def __init__(self, path_to_backbone: str | Path, in_dim: int):
         super().__init__()
-        
+
         self.path = Path(path_to_backbone)
         self.name = self.path.stem
 

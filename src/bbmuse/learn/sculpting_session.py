@@ -23,11 +23,11 @@ from bbmuse.learn.policy_prober import PolicyProber
 from bbmuse.learn.policy_model import PolicyModel
 from bbmuse.learn.session_logger import SessionLogger
 from bbmuse.learn.reward import Reward
+from bbmuse.learn.action_spaces import make_ce_loss
 
 class SculptingSession:
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
         self.project = project
-        self.blackboard = self.project.get_blackboard()
         self.module_manager = module_manager
         self.device = device
 
@@ -63,30 +63,13 @@ class SculptingSession:
         self.prober = PolicyProber(self.policy_model, self.module_handler, self.project.get_blackboard(), self.rewards)
         self.prober.activate_listen()
 
-
-    def load_loss_functions(self, mod_handler, fallback_loss_function):
-        logger.info("Load loss functions for target representations of module %s", mod_handler)
-        loss_functions = {}
-        for provided_rep_name in mod_handler.get_provides():
-            rh = self.blackboard.get(provided_rep_name)
-            loss_candidate = getattr(rh.get_component(), "_loss", None)
-            if loss_candidate and callable(loss_candidate):
-                logger.debug("Found custom loss function for %s.", rh)
-                loss_functions[provided_rep_name] = loss_candidate
-            else:
-                logger.debug("No custom loss function found for %s. Will fallback to: %s", rh, fallback_loss_function)
-                loss_functions[provided_rep_name] = fallback_loss_function
-
-        return loss_functions
-
     def run(self,
         num_updates: int = 200,
         epochs: int = 10,
         lr: float = 1e-3,
         batch_size: int = 256,
-        entropy_coef = 0.001,
+        entropy_coef = 0.01,
         bc_coef = 0.01,
-        fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = 10,
     ) -> None:
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
@@ -99,7 +82,8 @@ class SculptingSession:
         clone_info = {"clone_info": {"clone_epochs": self.loaded_checkpoint.get_epoch(), "clone_loss": self.loaded_checkpoint.get_loss()}}
         session_logger.write_config_to_disk( { "run_kwargs": kwargs } | clone_info)
 
-        loss_functions = self.load_loss_functions(self.module_handler, fallback_loss_function)
+        loss_functions = {name: make_ce_loss(nvec)
+            for name, nvec in self.policy_model.model.config["action_spaces"].items()}
 
         self.policy_model.to(self.device)
         optimizer = torch.optim.Adam(self.policy_model.parameters(), lr=lr)
