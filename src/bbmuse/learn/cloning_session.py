@@ -174,8 +174,6 @@ class CloningSession:
                         for name, target in batch_targets.items():
                             repr_loss = loss_functions[name](preds[name], target)
 
-                            DEBUG_ONLY_accuracy.append(self._DEBUG_ONLY_accuracy(preds[name], target))
-
                             session_logger.log({f"loss__{name}": repr_loss})
                             loss = loss + repr_loss
 
@@ -183,11 +181,6 @@ class CloningSession:
                         loss.backward()
                         optimizer.step()
                         epoch_loss += loss.item()
-
-                    # >>> DEBUG
-                    DEBUG_ONLY_accuracy = sum(DEBUG_ONLY_accuracy) / len(DEBUG_ONLY_accuracy)
-                    session_logger.log({"accuracy": DEBUG_ONLY_accuracy})
-                    # <<< DEBUG
 
                     epoch_loss /= len(loader)
                     session_logger.log({"epoch": epoch, "loss": epoch_loss, "walltime": time()-start_walltime}).step()
@@ -206,9 +199,4 @@ class CloningSession:
             pt = Checkpoint(final_path)
             pt.save(self.clone_model, epoch, epoch_loss, optimizer)
             session_logger.write_to_disk()
-        
-
-    def _DEBUG_ONLY_accuracy(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        #pc_correct  = pred[:, :12].argmax(-1) == target[:, :12].argmax(-1)
-        #oct_correct = pred[:, 12:].argmax(-1) == target[:, 12:].argmax(-1)
-        return 0.0 #(pc_correct & oct_correct).float().mean(
+            
