@@ -64,12 +64,12 @@ class SculptingSession:
         self.prober.activate_listen()
 
     def run(self,
-        num_updates: int = 200,
-        epochs: int = 10,
+        num_updates: int = 100,
+        epochs: int = 5,
         lr: float = 1e-3,
         batch_size: int = 256,
-        entropy_coef = 0.01,
-        bc_coef = 0.01,
+        entropy_coef = 0.0,
+        bc_coef = 0.05,
         checkpoint_interval: int = 10,
     ) -> None:
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
@@ -120,6 +120,7 @@ class SculptingSession:
                         indices = torch.randperm(T, device=self.device)
 
                         epoch_loss = 0.0
+                        n_batches = 0
                         epoch_policy_loss = []
                         epoch_entropy = []
                         epoch_bc_loss = []
@@ -154,17 +155,17 @@ class SculptingSession:
                                     eps = 0.2
                                     clipped = torch.clamp(r, 1 - eps, 1 + eps)
                                     policy_loss = -torch.mean(torch.min(r * A, clipped * A))
-                                epoch_policy_loss.append(policy_loss)
+                                epoch_policy_loss.append(float(policy_loss))
 
                                 # entropy loss
                                 entropy = torch.mean(entropies[head_name])  # negative because we want to maximize entropy
-                                epoch_entropy.append(entropy)
+                                epoch_entropy.append(entropy.item())
                                 
                                 # BC loss
                                 bc_pred = pred_actions[head_name]           # what policy did
                                 bc_target = batch_oracle[head_name] # what original module did
                                 bc_loss = loss_functions[head_name](bc_pred, bc_target)
-                                epoch_bc_loss.append(bc_loss)
+                                epoch_bc_loss.append(bc_loss.item())
                                 
                                 loss_contribution = sum([
                                     policy_loss,
@@ -178,8 +179,12 @@ class SculptingSession:
                             batch_loss.backward()  # one backward through the full shared graph
                             optimizer.step()
 
-                            epoch_loss += batch_loss / len(indices)
+                            epoch_loss += batch_loss.item()
+                            n_batches += 1
 
+                    epoch_loss /= n_batches
+
+                    # TODO: also add entropy floor calculation for KL estimation to show drift from symbolic policy
                     session_logger.log({
                         "num_updates": num_updates,
                         "weighted_loss": epoch_loss,
@@ -216,7 +221,7 @@ class SculptingSession:
         trajectories = prober.flush()
         return trajectories
 
-    def compute_advantages(self, trajectories, discount_factor=0.99): # gae_lambda = 0.95):
+    def compute_advantages(self, trajectories, discount_factor=0.9): # gae_lambda = 0.95):
         # TODO extend advantage calculation to PPO standard: Critic with loss + GAE
         # TODO: truncated GAE (we have endless episodes)
         reward_keys = [k for k in trajectories.keys() if k.startswith('rewards__')]
