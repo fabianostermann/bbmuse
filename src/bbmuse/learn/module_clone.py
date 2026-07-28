@@ -131,6 +131,8 @@ class DefaultBackbone(nn.Module):
 class BackboneWrapper(nn.Module):
 
     def __init__(self, path_to_backbone: str | Path, in_dim: int):
+        super().__init__()
+        
         self.path = Path(path_to_backbone)
         self.name = self.path.stem
 

@@ -127,7 +127,7 @@ class ModuleListener:
         if len(set(timestep_counts.values())) > 1:
             logger.warning(
                 "Inconsistent timestep counts in %s, truncating to %d: %s",
-                self._handler.get_name(), min_timesteps, timestep_counts
+                self._mod_handler.get_name(), min_timesteps, timestep_counts
             )
             rep_arrays = {k: v[:min_timesteps] for k, v in rep_arrays.items()}
 

@@ -68,6 +68,7 @@ class Checkpoint:
         model.load_state_dict(self._data["model_state_dict"])
         model.to(self.device)
 
+        self._model = model
         return model
 
     def make_optimizer(self):
@@ -89,6 +90,7 @@ class Checkpoint:
         else:
             logger.info("Optimizer state_dict not available from checkpoint '%s'. Returning blank optimizer.", self.path)
 
+        self._optimizer = optimizer
         return optimizer
 
     def get_epoch(self):

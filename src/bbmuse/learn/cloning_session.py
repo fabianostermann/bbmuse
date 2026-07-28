@@ -188,7 +188,7 @@ class CloningSession:
                 
                 # save checkpoints
                 if not self.dry_run:
-                    if checkpoint_interval and epochs % checkpoint_interval == 0:
+                    if checkpoint_interval and epoch % checkpoint_interval == 0:
                         ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
                         ckpt = Checkpoint(ckpt_path)
                         ckpt.save(self.clone_model, epoch, epoch_loss, optimizer)
@@ -199,4 +199,3 @@ class CloningSession:
             pt = Checkpoint(final_path)
             pt.save(self.clone_model, epoch, epoch_loss, optimizer)
             session_logger.write_to_disk()
-            
