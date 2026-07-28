@@ -142,7 +142,7 @@ class CloningSession:
                 seg = p[:, off:off+k]
                 h += -(seg * np.log(np.clip(seg, 1e-12, None))).sum(-1)
                 off += k
-            floors[name] = float((h / len(nvec)).mean())
+            floors[name] = float((h).mean())
 
         coverage = 1 - n_groups / T
         logger.info("Entropy floor per rep: %s (state coverage=%.3f, mean group size=%.1f)",

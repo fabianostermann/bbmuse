@@ -30,5 +30,5 @@ def make_ce_loss(nvec):
             F.cross_entropy(p, t)
             for p, t in zip(torch.split(pred, nvec, -1),
                             torch.split(target, nvec, -1))
-        ) / len(nvec)
+        )
     return _loss
