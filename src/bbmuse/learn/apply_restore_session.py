@@ -66,8 +66,9 @@ class ApplyRestoreSession:
         content = self.read_from_module_file(module_path)
 
         if "#bblearn---backup#" in content:
-            logger.error("Writing aborted. bblearn-backup tag already in file: %s", module_path)
-            return
+            logger.info("Restoring first. Bblearn-backup tag already found in: %s", module_path)
+            self.write_restore(self.module_handler.get_file_location())
+            content = self.read_from_module_file(module_path)
 
         # backup original file content
         content = '\n'.join(f"#bblearn---backup#{line}" for line in content.splitlines())
@@ -87,6 +88,8 @@ class ApplyRestoreSession:
         content = content.replace("###<bblearn---provides>###", repr(list(self.module_handler.get_provides())))
         self.write_to_module_file(module_path, content)
 
+        logger.info("Module %s applied.", self.module_handler.get_name())
+
     def write_restore(self, module_path):
         content = self.read_from_module_file(module_path)
 
@@ -98,6 +101,8 @@ class ApplyRestoreSession:
             for line in content.splitlines()
             if line.startswith("#bblearn---backup#"))
         self.write_to_module_file(module_path, content)
+
+        logger.info("Module %s restored.", self.module_handler.get_name())
 
     def read_from_module_file(self, file_path: str | Path) -> str:
         """
