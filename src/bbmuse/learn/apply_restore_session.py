@@ -82,6 +82,9 @@ class ApplyRestoreSession:
         content += BBMUSE_NATIVE_MODULE_STUB
         content = content.replace("###<bblearn---checkpoint_path>###", f"\"{checkpoint_path}\"")
         content = content.replace("###<bblearn---torch.device>###", f"\"{device}\"")
+        content = content.replace("###<bblearn---uses>###", repr(list(self.module_handler.get_uses())))
+        content = content.replace("###<bblearn---requires>###", repr(list(self.module_handler.get_requires())))
+        content = content.replace("###<bblearn---provides>###", repr(list(self.module_handler.get_provides())))
         self.write_to_module_file(module_path, content)
 
     def write_restore(self, module_path):
@@ -154,9 +157,9 @@ import torch
 from bbmuse.learn.checkpoint import Checkpoint
 
 # --- this module's blackboard contract ---------------------------------------
-USES     = [ "UsedRep" ]
-REQUIRES = [ "ReqRep" ]
-PROVIDES = [ "ProvRep", "UsedRep" ]
+USES     = ###<bblearn---uses>###
+REQUIRES = ###<bblearn---requires>###
+PROVIDES = ###<bblearn---provides>###
 # ------------------------------------------------------------------------------
 
 # --- checkpoint location + inference device ------------------------
@@ -205,11 +208,14 @@ def _update(bb):
 
         outputs = _model(inputs)
 
+        # sample from output distribution
         for name in PROVIDES:
             nvec = _model.config["action_spaces"][name]
-            assert sum(nvec) == math.prod(_model.config["output_dims"][name])
             segments = torch.split(outputs[name].squeeze(0), nvec, dim=-1)
-            action = torch.stack([s.argmax(-1) for s in segments], dim=-1)
+            action = torch.stack([
+                torch.multinomial(torch.softmax(s, dim=-1), 1).squeeze(-1)
+                for s in segments
+            ], dim=-1)
             getattr(bb, name)._unpack(action)
 
 
