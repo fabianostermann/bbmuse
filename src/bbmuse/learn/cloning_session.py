@@ -69,6 +69,8 @@ class CloningSession:
         path_to_backbone = self.get_path_to_backbone(args.backbone)
         self.clone_model = ModuleClone(input_dims_dict, output_dims_dict, action_spaces, path_to_backbone)
 
+        self.entropy_floors, self.coverage = self.compute_entropy_floor()
+
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
             "requires": {},
@@ -111,6 +113,42 @@ class CloningSession:
         else:
             raise FileNotFoundError(f"Backbone file not found: {ptb}")
 
+    def compute_entropy_floor(self):
+        """Per-rep conditional entropy H(target | observable state), using the
+        same normalization as make_ce_loss so it can be subtracted from the loss."""
+        inputs = self.episode["uses"] | self.episode["requires"]
+        X = np.concatenate([v.reshape(len(v), -1) for v in inputs.values()], axis=-1)
+        T = len(X)
+
+        # group timesteps by exact state
+        keys, group_ids = {}, np.empty(T, dtype=np.int64)
+        for i, row in enumerate(X):
+            group_ids[i] = keys.setdefault(row.tobytes(), len(keys))
+        n_groups = len(keys)
+        counts = np.bincount(group_ids, minlength=n_groups)
+
+        floors, self.soft_targets = {}, {}
+        for name, arr in self.episode["provides"].items():
+            A = arr.reshape(T, -1)
+            sums = np.zeros((n_groups, A.shape[1]))
+            np.add.at(sums, group_ids, A)
+            p_group = sums / counts[:, None]        # empirical dist per group
+            p = p_group[group_ids]                  # broadcast back per timestep
+            self.soft_targets[name] = p
+
+            nvec, off = self.clone_model.config["action_spaces"][name], 0
+            h = np.zeros(T)
+            for k in nvec:
+                seg = p[:, off:off+k]
+                h += -(seg * np.log(np.clip(seg, 1e-12, None))).sum(-1)
+                off += k
+            floors[name] = float((h / len(nvec)).mean())
+
+        coverage = 1 - n_groups / T
+        logger.info("Entropy floor per rep: %s (state coverage=%.3f, mean group size=%.1f)",
+                    {k: round(v, 4) for k, v in floors.items()}, coverage, T / n_groups)
+        return floors, coverage
+
     def run(self,
         epochs: int = 7,
         lr: float = 1e-3,
@@ -148,7 +186,7 @@ class CloningSession:
         input_keys = list(inputs.keys())
         target_keys = list(targets.keys())
         dataset = TensorDataset(*inputs.values(), *targets.values()) # TODO: do this manually without torch loaders. Copy from sculpt_session
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
         start_walltime = time()
         logger.info("Starting training for %s epochs.", epochs)
@@ -156,7 +194,7 @@ class CloningSession:
             for epoch in pbar:
             
                 epoch_loss = 0.0
-                DEBUG_ONLY_accuracy = []
+                repr_losses = {name: 0.0 for name in target_keys}
 
                 if epoch > 0:
 
@@ -170,9 +208,9 @@ class CloningSession:
                         loss = 0.0
 
                         for name, target in batch_targets.items():
+                            n = target.shape[0]
                             repr_loss = loss_functions[name](preds[name], target)
-
-                            session_logger.log({f"loss__{name}": repr_loss})
+                            repr_losses[name] += repr_loss.item()
                             loss = loss + repr_loss
 
                         loss = loss / len(batch_targets)
@@ -181,8 +219,19 @@ class CloningSession:
                         epoch_loss += loss.item()
 
                     epoch_loss /= len(loader)
-                    session_logger.log({"epoch": epoch, "loss": epoch_loss, "walltime": time()-start_walltime}).step()
-                    pbar.set_description(f"epoch={epoch:04d} loss={epoch_loss:.6f}")
+                    repr_losses = {name: v / len(loader) for name, v in repr_losses.items()}
+
+                    mean_floor = sum(self.entropy_floors.values()) / len(self.entropy_floors)
+                    kl = epoch_loss - mean_floor
+
+                    session_logger.log(
+                        {f"loss__{name}": v for name, v in repr_losses.items()}
+                        | {f"kl__{name}": v - self.entropy_floors[name] for name, v in repr_losses.items()}
+                        | {"epoch": epoch, "loss": epoch_loss, "kl": kl,
+                        "walltime": time() - start_walltime}
+                    ).step()
+                    
+                    pbar.set_description(f"epoch={epoch} loss={epoch_loss:.4f} kl={kl:.4f}")
                 
                 # save checkpoints
                 if not self.dry_run:
