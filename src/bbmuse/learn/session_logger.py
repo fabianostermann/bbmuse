@@ -20,7 +20,7 @@ class SessionLogger:
         if not pd:
             logger.warning("pandas not available. Falling back to pickling.")
 
-        self.run_directory = Path(run_directory)
+        self.run_directory = Path(run_directory) if run_directory else None
 
         self.history = []
         self.current_step = {}
