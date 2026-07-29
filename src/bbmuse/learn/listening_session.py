@@ -37,6 +37,8 @@ class ListeningSession:
                 if rep_arrays:
                     ep_path = self.module_manager.get_next_episode_path(listener.get_module_handler(), tag=args.tag)
                     np.savez_compressed(ep_path, **rep_arrays)
-                    logger.info("Record from ListeningSession stored at: %s", ep_path)
+
+                    size_mb = ep_path.stat().st_size / 1024**2
+                    logger.info("Record from ListeningSession stored at: %s (%s)", ep_path, f"{size_mb:.2f} MiB")
                 else:
                     logger.warning("Rep_array was empty. Nothing to write to disk.")
