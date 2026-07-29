@@ -20,6 +20,8 @@ class Session():
 
         self.project = project
         self.module_manager = ModuleManager(project)
+        
+        # TODO: somehow set the project to "training mode" (maybe a hook on representations that hack in high tempos etc.)
 
         if hasattr(self, args.command):
             command_method = getattr(self, args.command)
