@@ -14,6 +14,7 @@ from bbmuse.learn.policy_model import PolicyModel
 
 class PolicyProber(ModuleListener):
 
+    # TODO: Strip all occurencies of reward and use reward_collector instead!
     def __init__(self, policy_model: PolicyModel, mod_handler: ModuleHandler, blackboard: Blackboard, rewards: Reward):
         super().__init__(mod_handler, blackboard)
         self.rewards = rewards
@@ -69,6 +70,7 @@ class PolicyProber(ModuleListener):
             rep_handler = self._blackboard.get(rep_name)
             rep_handler.get_component()._unpack(last_actions[rep_name])
             
+        # TODO: relocate reward calculation: in joint learning mode, rewards may look downstream at not-yet-updated representations
         # collect available rewards (self._check_function_exists(rh, "_reward"))
         for reward in self.rewards:
             name = reward.get_name()
@@ -98,7 +100,7 @@ class PolicyProber(ModuleListener):
             for k, v in self._log_probs_buffer.items()
         }
 
-        # Rewards are scalars .> convert to a 1D torch tensor per rep
+        # Rewards are scalars -> convert to a 1D torch tensor per rep
         rep_arrays |= {
             f"rewards__{k}": torch.as_tensor(v, dtype=torch.float32, device=self.device)
             for k, v in self._rewards_buffer.items()
