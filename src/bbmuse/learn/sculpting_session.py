@@ -142,7 +142,7 @@ class SculptingSession:
 
                             for head_name in new_log_probs.keys():
 
-                                policy_loss = 0.0
+                                policy_loss = torch.zeros((), device=self.device)
                                 if not batch_advantages is None:
                                     A = batch_advantages
                                     old_lp = batch_old_lp[head_name]
@@ -155,7 +155,7 @@ class SculptingSession:
                                     eps = 0.2
                                     clipped = torch.clamp(r, 1 - eps, 1 + eps)
                                     policy_loss = -torch.mean(torch.min(r * A, clipped * A))
-                                epoch_policy_loss.append(float(policy_loss))
+                                epoch_policy_loss.append(policy_loss.item())
 
                                 # entropy loss
                                 entropy = torch.mean(entropies[head_name])  # negative because we want to maximize entropy
@@ -236,7 +236,7 @@ class SculptingSession:
         # Average across all rewards into a single signal
         stacked_rewards = torch.stack([trajectories[k] for k in reward_keys], dim=0)
         # Normalize each reward signal over the episode length before combining
-        stacked_rewards = (stacked_rewards - stacked_rewards.mean(dim=1, keepdim=True)) / (stacked_rewards.std(dim=1, keepdim=True) + 1e-8)
+        stacked_rewards = (stacked_rewards - stacked_rewards.mean(dim=1, keepdim=True)) #/ (stacked_rewards.std(dim=1, keepdim=True) + 1e-8)
         combined_rewards = stacked_rewards.mean(dim=0)  # shape: (T,)
 
         # Compute discounted returns
@@ -248,6 +248,6 @@ class SculptingSession:
             returns[t] = G
 
         # Normalize
-        returns = (returns - returns.mean()) / (returns.std() + 1e-8) # normalize
+        returns = (returns - returns.mean()) #/ (returns.std() + 1e-8)
 
         return returns, named_returns
