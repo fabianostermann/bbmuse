@@ -97,8 +97,10 @@ class CloningSession:
         for provided_rep_name in mod_handler.get_provides():
             rh = self.blackboard.get(provided_rep_name)
             ac_candidate = getattr(rh.get_component(), "_action_space", None)
-            assert all(isinstance(n, int) and n >= 2 for n in ac_candidate), "action space spec not found or not a valid list."
+            if callable(ac_candidate):
+                ac_candidate = ac_candidate()
 
+            assert all(isinstance(n, int) and n >= 2 for n in ac_candidate), "action space spec not found or not a valid list."
             logger.debug("Found action space spec for %s.", rh)
             action_spaces[provided_rep_name] = ac_candidate
         return action_spaces
