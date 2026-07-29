@@ -34,11 +34,7 @@ class Reward:
         return module
 
     def call_reward(self, bb):
-        try:
-            return self.module._reward(bb)
-        except Exception:
-            logger.exception("Reward function %s produced an error. Skipping.")
-            return 0.0
+        return self.module._reward(bb)
 
     def get_name(self):
         return self.name
