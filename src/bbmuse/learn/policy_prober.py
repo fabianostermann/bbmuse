@@ -7,24 +7,20 @@ import torch
 
 from bbmuse.engine.module_handler import ModuleHandler
 from bbmuse.engine.blackboard import Blackboard
-from bbmuse.learn.reward import Reward
 
 from bbmuse.learn.module_listener import ModuleListener
 from bbmuse.learn.policy_model import PolicyModel
 
 class PolicyProber(ModuleListener):
 
-    # TODO: Strip all occurencies of reward and use reward_collector instead!
-    def __init__(self, policy_model: PolicyModel, mod_handler: ModuleHandler, blackboard: Blackboard, rewards: Reward):
+    def __init__(self, policy_model: PolicyModel, mod_handler: ModuleHandler, blackboard: Blackboard):
         super().__init__(mod_handler, blackboard)
-        self.rewards = rewards
 
         self.policy_model = policy_model
         self.device = next(policy_model.parameters()).device
 
         self._actions_buffer = {}  # rep_name -> list of arrays
         self._log_probs_buffer = {}  # rep_name -> list of arrays
-        self._rewards_buffer = {}  # rep_name -> list of scalars
 
     def _check_requirements(self):
         super()._check_requirements()
@@ -69,17 +65,9 @@ class PolicyProber(ModuleListener):
             # unpack actions to original representation
             rep_handler = self._blackboard.get(rep_name)
             rep_handler.get_component()._unpack(last_actions[rep_name])
-            
-        # TODO: relocate reward calculation: in joint learning mode, rewards may look downstream at not-yet-updated representations
-        # collect available rewards (self._check_function_exists(rh, "_reward"))
-        for reward in self.rewards:
-            name = reward.get_name()
-            reward_value = reward.call_reward(self.bb_view)
-            if name not in self._rewards_buffer:
-                self._rewards_buffer[name] = []
-            self._rewards_buffer[name].append(reward_value)
 
     def flush(self):
+
         rep_arrays = super().flush()  # shapes requires__, uses__, and provides__ buffers
 
         # convert numpy arrays to torch tensors # TODO: bottleneck?
@@ -100,15 +88,8 @@ class PolicyProber(ModuleListener):
             for k, v in self._log_probs_buffer.items()
         }
 
-        # Rewards are scalars -> convert to a 1D torch tensor per rep
-        rep_arrays |= {
-            f"rewards__{k}": torch.as_tensor(v, dtype=torch.float32, device=self.device)
-            for k, v in self._rewards_buffer.items()
-        }
-
         assert len(set([v.shape[0] for v in rep_arrays.values()])) == 1,\
             "Episode lengths do not match."
         self._actions_buffer.clear()
         self._log_probs_buffer.clear()
-        self._rewards_buffer.clear()
         return rep_arrays

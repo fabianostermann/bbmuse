@@ -1,15 +1,47 @@
-TODO: Warning -> Not yet finished nor tested!
+import logging
+
+import importlib.util
+from pathlib import Path
+
+import torch
+
+from bbmuse.engine.blackboard import _BlackboardView
+
+logger = logging.getLogger(__name__)
 
 class RewardCollector:
     """Evaluates all rewards once per timestep, after every module has written."""
 
-    def __init__(self, project, rewards):
+    def __init__(self, project, reward_fpaths, device=torch.device("cpu")):
         self.project = project
-        self.rewards = rewards
+        self.device = device
+
         self.buffer = {}          # reward_name -> list of scalars
         self._active = False
 
-    def activate(self, last_handler):
+        # load reward functions from disk
+        self.rewards = []
+        for path in reward_fpaths:
+            try:
+                reward = Reward(path)
+                self.rewards.append(reward)
+            except Exception:
+                logger.exception("Ignored reward at: %s", path)
+        if not self.rewards:
+            logger.warning("No reward functions in place.")
+
+        # create representation-complete blackboard view
+        blackboard = self.project.get_blackboard()
+        self.bb_view = _BlackboardView(blackboard, readable_keys=blackboard.list_content())
+
+        #TODO: determine last_handler from project
+        exec_order = self.project.get_controller().execution_order
+        last_handler = exec_order[-1]
+        logger.debug("Activating reward collection on mod_handler %s. Exec order is: %s", last_handler, exec_order)
+        self._activate(last_handler)
+
+    def _activate(self, last_handler):
+
         self._original = last_handler.call_update
         original, collector = self._original, self
 
@@ -23,12 +55,50 @@ class RewardCollector:
         self._active = True
 
     def _collect(self):
-        bb = self.project.get_blackboard()      # full scope, all reps
         for reward in self.rewards:
             name = reward.get_name()
-            self.buffer.setdefault(name, []).append(reward.call_reward(bb))
+            self.buffer.setdefault(name, []).append(reward.call_reward(self.bb_view))
 
     def flush(self):
-        out = {f"rewards__{k}": list(v) for k, v in self.buffer.items()}
+        # Rewards are scalars -> convert to a 1D torch tensor per rep
+        out = {
+            f"rewards__{k}": torch.as_tensor(v, dtype=torch.float32, device=self.device)
+            for k, v in self.buffer.items()
+        }
         self.buffer.clear()
         return out
+
+
+class Reward:
+    def __init__(self, reward_filepath: str | Path):
+        self.reward_filepath = Path(reward_filepath).resolve()
+        self.name = self.reward_filepath.stem
+
+        if not self.reward_filepath.exists():
+            raise FileNotFoundError(f"Reward file not found: {self.reward_filepath}")
+
+        if self.reward_filepath.suffix != ".py":
+            raise ValueError(f"Expected a .py file, got: {self.reward_filepath.suffix}")
+
+        self.module = self._import_module()
+
+        if not hasattr(self.module, "_reward"):
+            raise AttributeError(
+                f"Reward module '{self.name}' must define a '_reward' function."
+            )
+
+    def _import_module(self):
+        spec = importlib.util.spec_from_file_location(self.name, self.reward_filepath)
+        if spec is None:
+            raise ImportError(f"Could not load spec from: {self.reward_filepath}")
+
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        return module
+
+    def call_reward(self, bb):
+        return self.module._reward(bb)
+
+    def get_name(self):
+        return self.name

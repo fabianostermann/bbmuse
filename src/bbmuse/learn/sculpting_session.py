@@ -20,9 +20,9 @@ from bbmuse.engine.project import BbMuseProject
 from bbmuse.learn.module_clone import ModuleClone
 from bbmuse.learn.checkpoint import Checkpoint
 from bbmuse.learn.policy_prober import PolicyProber
+from bbmuse.learn.reward_collector import RewardCollector
 from bbmuse.learn.policy_model import PolicyModel
 from bbmuse.learn.session_logger import SessionLogger
-from bbmuse.learn.reward import Reward
 from bbmuse.learn.action_spaces import make_ce_loss
 
 class SculptingSession:
@@ -48,20 +48,13 @@ class SculptingSession:
         self.policy_model = PolicyModel(clone_model)
         logger.info("Loaded model from: %s", clone_final_path)
 
-        reward_fpaths = self.module_manager.get_available_rewards_filepaths()
-        self.rewards = []
-        for path in reward_fpaths:
-            try:
-                reward = Reward(path)
-                self.rewards.append(reward)
-            except Exception:
-                logger.exception("Ignored reward at: %s", path)
-        if not self.rewards:
-            logger.warning("No reward functions in place.")
-
         # make module prober
-        self.prober = PolicyProber(self.policy_model, self.module_handler, self.project.get_blackboard(), self.rewards)
+        self.prober = PolicyProber(self.policy_model, self.module_handler, self.project.get_blackboard())
         self.prober.activate_listen()
+
+        # make reward collector
+        reward_fpaths = self.module_manager.get_available_rewards_filepaths()
+        self.reward_collector = RewardCollector(self.project, reward_fpaths, self.device)
 
     def run(self,
         num_updates: int = 100,
@@ -97,7 +90,7 @@ class SculptingSession:
                     logger.debug("Start collecting trajectories (exploration phase)..")
 
                     # collect trajectories with current policy
-                    trajectories = self.collect(self.policy_model, self.project, self.prober)
+                    trajectories = self.collect(self.policy_model, self.project, self.prober, self.reward_collector)
                     advantages, named_returns = self.compute_advantages(trajectories)
                     mean_returns = {f"rew_{name}": v.mean().item() for name, v in named_returns.items()}
 
@@ -212,14 +205,22 @@ class SculptingSession:
             pt.save(self.policy_model.model, num_updates, epoch_loss, optimizer)
             session_logger.write_to_disk()
         
-    def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber):
+    def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber, reward_collector: RewardCollector):
         # run policy -> collect episodes
         policy_model.eval() # deactivate dropout, BatchNorm etc.
         with torch.no_grad():
             env.run(quit_after=2, run_mode=0)
 
         trajectories = prober.flush()
-        return trajectories
+        trajectories |= reward_collector.flush()
+
+        # prober fires mid-cycle, collector fires at end of execution order:
+        # a truncated final cycle desynchronizes them by one sample
+        lengths = {k: v.shape[0] for k, v in trajectories.items()}
+        T = min(lengths.values())
+        if len(set(lengths.values())) > 1:
+            logger.warning("Trajectory lengths differ, truncating to %d: %s", T, lengths)
+        return {k: v[:T] for k, v in trajectories.items()}
 
     def compute_advantages(self, trajectories, discount_factor=0.9): # gae_lambda = 0.95):
         # TODO extend advantage calculation to PPO standard: Critic with loss + GAE
