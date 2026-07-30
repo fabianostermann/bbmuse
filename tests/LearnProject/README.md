@@ -1,4 +1,29 @@
-# chain_debug — minimal end-to-end diagnostic scenario for bblearn
+# Stochastic multi-agent system for test purposes
+
+## Main concept
+
+AgentA looks at the clock and, depending on the phase, has 4 / 2 / 1 / 3 allowed options — then picks uniformly among them. AgentB copies A with an offset (no choice) and separately rolls a 3-sided die. AgentD rolls a 3-sided die when A is even, otherwise has no choice. AgentC flips a coin when a certain sum is even, otherwise is forced.
+
+## What cloning learns
+
+Not "what did AgentA do," but "what die was AgentA rolling." A neural net that perfectly understands AgentA still can't predict its output — it can only predict the distribution. So its loss stops at the die's unpredictability and cannot go lower.
+
+## Why AgentD exists
+
+Look at the picture. AgentC can see AgentB's output. AgentD cannot see AgentB's, and B can't see D's — they're blind to each other, but the reward pays them only when their numbers match.
+
+That's the difference the 2×2 tests:
+
+- Chain (A and C): C watches A and reacts. Train them one at a time and it works, because reacting to something you can see is easy. -> "iterated best response" (IBR) / "Heterogeneous-Agent PPO" (HAPPO) w/o importance correction
+- Parallel (B and D): neither can watch the other. They have to agree in advance on a convention, using only the shared reward as feedback. Training one at a time may fail here, because each keeps adjusting to a partner that has already moved on. -> "Independent PPO" (IPPO) if no shared critic else "Multi-Agent PPO" (MAPPO, which builds on CTDE)
+
+## The formal setting
+
+Cooperative, common (team) reward, partial observability per agent → a Dec-POMDP. Heterogeneous agents, no parameter sharing (your action spaces differ per module).
+
+One nuance worth stating explicitly in the paper: standard Dec-POMDP assumes simultaneous actions, but your blackboard executes in topological order, so downstream agents observe upstream actions within the timestep. That's a sequential-move stochastic game, and it's the structural property that makes your chain cell easy and your parallel cell hard. It's also exactly the property HAPPO and MAT construct deliberately — you get it from the architecture.
+
+# Details of diagnostic scenario for bblearn
 
 Clock (exogenous, NOT armed) -> AgentA -> AgentB -> AgentC, plus one reward.
 No semantics; every rule is "compute a support, sample uniformly from it",
@@ -26,7 +51,7 @@ well above 1; a few thousand timesteps is plenty).
 | B: shift-segment CE        | ~ 0                     | input wiring to the model    |
 | B: loss__RepB converges to | 1.0986 (= 0+ln3, joint) | /len(nvec) convention drift  |
 | C: loss__RepC converges to | 0.3369 (= 35/72 * ln2)  | multi-input conditioning     |
-| D: loss__RepD converges to | 0.5036 (?)
+| D: loss__RepD converges to | 0.5036 (?)              | ?                            |
 | all: kl__<rep>             | ~ 0 after convergence   | (whatever the row above says)|
 | lesion RepA before B reads | shift segment collapses | info not flowing on the edge |
 
