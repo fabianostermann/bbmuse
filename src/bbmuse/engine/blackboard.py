@@ -43,7 +43,7 @@ class Blackboard:
 
 class _BlackboardView:
 
-    def __init__(self, blackboard: Blackboard, readable_keys=None, writable_keys=None):
+    def __init__(self, blackboard: Blackboard, readable_keys=[], writable_keys=[]):
         rep_views = {}
         for readable_key in readable_keys:
             rep_views[readable_key] = blackboard.get(readable_key).create_view(read_only=True)
