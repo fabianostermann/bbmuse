@@ -131,10 +131,13 @@ class ModuleListener:
             )
             rep_arrays = {k: v[:min_timesteps] for k, v in rep_arrays.items()}
 
+        ModuleListener.clear(self) # necessary for child classes
+        return rep_arrays
+
+    def clear(self):
         self._requires_buffer.clear()
         self._uses_buffer.clear()
         self._provides_buffer.clear()
-        return rep_arrays
 
     def get_module_handler(self):
         return self._mod_handler

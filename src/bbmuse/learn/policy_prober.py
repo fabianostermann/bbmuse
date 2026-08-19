@@ -67,7 +67,6 @@ class PolicyProber(ModuleListener):
             rep_handler.get_component()._unpack(last_actions[rep_name])
 
     def flush(self):
-
         rep_arrays = super().flush()  # shapes requires__, uses__, and provides__ buffers
 
         # convert numpy arrays to torch tensors # TODO: bottleneck?
@@ -90,6 +89,10 @@ class PolicyProber(ModuleListener):
 
         assert len(set([v.shape[0] for v in rep_arrays.values()])) == 1,\
             "Episode lengths do not match."
+        self.clear()
+        return rep_arrays
+
+    def clear(self):
+        super().clear()
         self._actions_buffer.clear()
         self._log_probs_buffer.clear()
-        return rep_arrays

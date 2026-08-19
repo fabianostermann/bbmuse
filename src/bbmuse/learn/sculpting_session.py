@@ -31,7 +31,7 @@ class SculptingSession:
         self.module_manager = module_manager
         self.device = device
 
-    def build(self, args):
+    def build(self, args, skip_reward_collector=False):
         self.module_handler = self.module_manager.identify_module(args.module[0])
         if not self.module_handler:
             logger.error("Module handler not found: %s", args.module[0])
@@ -40,12 +40,18 @@ class SculptingSession:
         self.tag = args.tag
         self.dry_run = args.dry_run
 
+        self.curr_run_dir = None
+        if not self.dry_run:
+            self.curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler, self.tag)
+        self.session_logger = SessionLogger(self.curr_run_dir)
+
         # load clone from disk -- TODO: create mode that runs without BC model (init just a random model)
         clone_dirs = self.module_manager.get_available_clone_run_dirs(self.module_handler)
         clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
         self.loaded_checkpoint = Checkpoint(clone_final_path, self.device).load()
         clone_model = self.loaded_checkpoint.make_model()
         self.policy_model = PolicyModel(clone_model)
+        self.policy_model.to(self.device)
         logger.info("Loaded model from: %s", clone_final_path)
 
         # make module prober
@@ -53,8 +59,11 @@ class SculptingSession:
         self.prober.activate_listen()
 
         # make reward collector
-        reward_fpaths = self.module_manager.get_available_rewards_filepaths()
-        self.reward_collector = RewardCollector(self.project, reward_fpaths, self.device)
+        if skip_reward_collector: # useful to avoid duplicated monkey patches
+            self.reward_collector = None
+        else:
+            reward_fpaths = self.module_manager.get_available_rewards_filepaths()
+            self.reward_collector = RewardCollector(self.project, reward_fpaths, self.device)
 
     def run(self,
         num_updates: int = 100,
@@ -64,21 +73,17 @@ class SculptingSession:
         entropy_coef = 0.0,
         bc_coef = 0.05,
         checkpoint_interval: int = 10,
+        log_context = {},
+        log_global_offset = 0,
     ) -> None:
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
 
-        curr_run_dir = None
-        if not self.dry_run:
-            curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler, self.tag)
-        
-        session_logger = SessionLogger(curr_run_dir)
         clone_info = {"clone_info": {"clone_epochs": self.loaded_checkpoint.get_epoch(), "clone_loss": self.loaded_checkpoint.get_loss()}}
-        session_logger.write_config_to_disk( { "run_kwargs": kwargs } | clone_info)
+        self.session_logger.write_config_to_disk( { "run_kwargs": kwargs } | clone_info, overwrite_dir=self.curr_run_dir)
 
         loss_functions = {name: make_ce_loss(nvec)
             for name, nvec in self.policy_model.model.config["action_spaces"].items()}
 
-        self.policy_model.to(self.device)
         optimizer = torch.optim.Adam(self.policy_model.parameters(), lr=lr)
 
         epoch_loss = 0.0
@@ -94,7 +99,7 @@ class SculptingSession:
                     advantages, named_returns = self.compute_advantages(trajectories)
                     mean_returns = {f"rew_{name}": v.mean().item() for name, v in named_returns.items()}
 
-                    session_logger.log(mean_returns)
+                    self.session_logger.log(mean_returns)
 
                     # extract what we need once, outside the loop
                     states = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('requires__') or k.startswith('uses__')}
@@ -178,14 +183,15 @@ class SculptingSession:
                     epoch_loss /= n_batches
 
                     # TODO: also add entropy floor calculation for KL estimation to show drift from symbolic policy
-                    session_logger.log({
+                    self.session_logger.log({
                         "num_updates": num_updates,
                         "weighted_loss": epoch_loss,
                         "policy_loss": sum(epoch_policy_loss)/len(epoch_policy_loss),
                         "entropy": sum(epoch_entropy)/len(epoch_entropy),
                         "bc_loss": sum(epoch_bc_loss)/len(epoch_bc_loss),
                         "walltime": time()-start_walltime,
-                    }).step()
+                    } | log_context | {"global_update": num_updates+log_global_offset}
+                    ).step()
 
                     desc = f"num_updates={num_updates:04d} loss={epoch_loss:.6f}"
                     pbar.set_description(desc)
@@ -193,17 +199,17 @@ class SculptingSession:
                 # save intermediate policy checkpoints
                 if not self.dry_run:
                     if checkpoint_interval and num_updates % checkpoint_interval == 0:
-                        ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
+                        ckpt_path = self.module_manager.get_checkpoint_path(self.curr_run_dir, num_updates+log_global_offset)
                         ckpt = Checkpoint(ckpt_path)
                         ckpt.save(self.policy_model.model, num_updates, epoch_loss, optimizer)
-                    session_logger.write_to_disk()
+                    self.session_logger.write_to_disk()
 
         # save final policy
         if not self.dry_run:
-            final_path = self.module_manager.get_final_model_path(curr_run_dir)
+            final_path = self.module_manager.get_final_model_path(self.curr_run_dir)
             pt = Checkpoint(final_path)
             pt.save(self.policy_model.model, num_updates, epoch_loss, optimizer)
-            session_logger.write_to_disk()
+            self.session_logger.write_to_disk()
         
     def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber, reward_collector: RewardCollector):
         # run policy -> collect episodes

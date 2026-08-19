@@ -72,11 +72,14 @@ class SessionLogger:
                 result[k] = v
         return result
 
-    def write_config_to_disk(self, config_dict):
-        if not self.run_directory:
+    def write_config_to_disk(self, config_dict, overwrite_dir=None):
+        out_dir = self.run_directory
+        if overwrite_dir:
+            out_dir = overwrite_dir
+        if not out_dir:
             return
 
-        filepath = Path(self.run_directory) / "config.json"
+        filepath = Path(out_dir) / "config.json"
         config_dict = self._sanitize_dict_for_json(config_dict)
 
         with open(filepath, "w") as f:

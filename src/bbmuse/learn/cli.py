@@ -61,6 +61,12 @@ def process_args():
     sub_sculpt.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
     sub_sculpt.add_argument("--tag", type=str, default=None, help="A string tag that is appended to the filepath.")
 
+    sub_sculpt_rr = subparsers.add_parser("sculpt-rr", help='Refine multiple trained models based on heuristic constraints and human feedback (round robin mode).', parents=[common])
+    sub_sculpt_rr.add_argument('modules', nargs='*', help="Path or name of modules.")
+    sub_sculpt_rr.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
+    sub_sculpt_rr.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
+    sub_sculpt_rr.add_argument("--tag", type=str, default=None, help="A string tag that is appended to the filepath.")
+
     sub_apply = subparsers.add_parser("apply", help='Construct a BbMuse module file that wraps a neural model but runs as native BbMuse module.', parents=[common])
     sub_apply.add_argument('module', nargs=1, help="Path or name of a module")
     sub_apply.add_argument('--list', action='store_true', help="List all available models")

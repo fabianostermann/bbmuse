@@ -23,11 +23,12 @@ class Session():
         
         # TODO: somehow set the project to "training mode" (maybe a hook on representations that hack in high tempos etc.)
 
-        if hasattr(self, args.command):
-            command_method = getattr(self, args.command)
+        command = args.command.replace("-", "_")
+        if hasattr(self, command):
+            command_method = getattr(self, command)
             command_method(args)
         else:
-            logger.error("Command '%s()' is unknown.", args.command)
+            logger.error("Command '%s()' is unknown.", command)
 
         self.module_manager.clean()
 
@@ -62,6 +63,14 @@ class Session():
         cs = SculptingSession(self.project, self.module_manager, device=device)
         cs.build(args)
         cs.run()
+        
+    def sculpt_rr(self, args):
+        device = self.get_desired_torch_device(args.device)
+        logger.debug("Starting SculptingSession with RoundRobin..")
+        from bbmuse.learn.round_robin_session import RoundRobinSculptingSession
+        rr = RoundRobinSculptingSession(self.project, self.module_manager, device=device)
+        rr.build(args, module_names=args.modules)
+        rr.run(num_updates=3)
 
     def apply(self, args):
         from bbmuse.learn.apply_restore_session import ApplyRestoreSession
