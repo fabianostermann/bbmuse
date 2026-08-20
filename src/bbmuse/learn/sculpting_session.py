@@ -71,7 +71,7 @@ class SculptingSession:
         lr: float = 1e-3,
         batch_size: int = 256,
         entropy_coef = 0.0,
-        bc_coef = 0.05,
+        bc_coef = 0.1,
         checkpoint_interval: int = 10,
         log_context = {},
         log_global_offset = 0,
@@ -215,7 +215,7 @@ class SculptingSession:
         # run policy -> collect episodes
         policy_model.eval() # deactivate dropout, BatchNorm etc.
         with torch.no_grad():
-            env.run(quit_after=2, run_mode=0)
+            env.run(quit_after=8, run_mode=0)
 
         trajectories = prober.flush()
         trajectories |= reward_collector.flush()

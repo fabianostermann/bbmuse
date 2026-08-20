@@ -70,7 +70,7 @@ class Session():
         from bbmuse.learn.round_robin_session import RoundRobinSculptingSession
         rr = RoundRobinSculptingSession(self.project, self.module_manager, device=device)
         rr.build(args, module_names=args.modules)
-        rr.run(num_updates=3)
+        rr.run(num_updates=20)
 
     def apply(self, args):
         from bbmuse.learn.apply_restore_session import ApplyRestoreSession

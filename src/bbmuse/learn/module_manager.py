@@ -24,6 +24,9 @@ class ModuleManager():
         self._rewards_dir = Path(self.project.config["bblearn"]["rewards"])
         self._rewards_dir.mkdir(parents=True, exist_ok=True)
 
+        self._experiments_dir = Path(self._working_dir, "experiments/")
+        self._experiments_dir.mkdir(parents=True, exist_ok=True)
+
         logger.debug("Working dir set to: %s", self._working_dir)
 
     def get_working_dir(self):
@@ -136,6 +139,22 @@ class ModuleManager():
     def get_available_sculpt_run_dirs(self, module_handler):
         sculpts_dir = self.get_sculpts_dir(module_handler)
         return sorted(sculpts_dir.glob("*"))
+
+    def create_next_experiments_dir(self, tag=None):
+        existing = self.get_available_experiment_dirs()
+        if existing:
+            last_number = int(existing[-1].stem.split("_")[0])
+            next_number = last_number + 1
+        else:
+            next_number = 1
+    
+        tag = f"_{tag}" if tag else ""
+        next_experiments_dir = self._experiments_dir / f"{next_number:03d}{tag}"
+        next_experiments_dir.mkdir(parents=False, exist_ok=False)
+        return next_experiments_dir
+
+    def get_available_experiment_dirs(self):
+        return sorted(self._experiments_dir.glob("*"))
 
     def get_checkpoint_path(self, run_dir: str | Path, epoch: int):
         """ Intended for use with clones and sculpt directories """

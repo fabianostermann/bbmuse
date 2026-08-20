@@ -57,9 +57,12 @@ class RoundRobinSculptingSession:
         reward_fpaths = self.module_manager.get_available_rewards_filepaths()
         self.reward_collector = RewardCollector(self.project, reward_fpaths, self.device)
 
-        # TODO: replace placeholder experiment directory
-        experiment_dir = "/home/osterman/Nextcloud/Uni/Dissertation/bbmuse_dev/bbmuse/tests/LearnProject/.bblearn"
+        experiment_dir = self.module_manager.create_next_experiments_dir(tag=args.tag)
         self.session_logger = SessionLogger(experiment_dir)
+
+        # TODO: make a experiments report file:
+        # it should log that this is a round robin session
+        # & log the self.session[*].curr_run_dir in order to be able to re-locate the corresponding sculpts
 
         for session in self.sessions.values():
             session.reward_collector = self.reward_collector
@@ -72,8 +75,8 @@ class RoundRobinSculptingSession:
     # -------------------------------------------------------------------- run
 
     def run(self,
-        rounds: int = 4,
-        shuffle: bool = True,
+        rounds: int = 5,
+        shuffle: bool = False,
         **run_kwargs
     ):
         """
