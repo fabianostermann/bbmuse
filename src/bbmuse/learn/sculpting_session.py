@@ -24,6 +24,7 @@ from bbmuse.learn.reward_collector import RewardCollector
 from bbmuse.learn.policy_model import PolicyModel
 from bbmuse.learn.session_logger import SessionLogger
 from bbmuse.learn.action_spaces import make_ce_loss
+from bbmuse.learn.metrics import estimate_entropy_floor
 
 class SculptingSession:
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
@@ -109,6 +110,14 @@ class SculptingSession:
                     # and the actions that the original module would have chosen (used for BC)
                     oracled_actions = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('provides__')}
 
+                    floors, _, mean_group = estimate_entropy_floor(
+                        {k: v.detach().cpu().numpy() for k, v in states.items()},
+                        {k: v.detach().cpu().numpy() for k, v in oracled_actions.items()},
+                        self.policy_model.model.config["action_spaces"],
+                        miller_madow=True,   # groups are ~1000x smaller than in cloning
+                    )
+                    floor = sum(floors.values()) / len(floors)
+
                     self.policy_model.train()
 
                     logger.debug("Train policy model (learning phase)..")
@@ -163,8 +172,8 @@ class SculptingSession:
                                 bc_pred = pred_actions[head_name]           # what policy did
                                 bc_target = batch_oracle[head_name] # what original module did
                                 bc_loss = loss_functions[head_name](bc_pred, bc_target)
-                                epoch_bc_loss.append(bc_loss.item())
-                                
+                                epoch_bc_loss.append(bc_loss.item() * len(idx) / len(new_log_probs))
+
                                 loss_contribution = sum([
                                     policy_loss,
                                     entropy_coef * -entropy,
@@ -182,13 +191,17 @@ class SculptingSession:
 
                     epoch_loss /= n_batches
 
-                    # TODO: also add entropy floor calculation for KL estimation to show drift from symbolic policy
+                    bc_mean = sum(epoch_bc_loss) / T # devided by T because weighted by len(idx) above -> per-sample mean
+
                     self.session_logger.log({
                         "num_updates": num_updates,
                         "weighted_loss": epoch_loss,
                         "policy_loss": sum(epoch_policy_loss)/len(epoch_policy_loss),
                         "entropy": sum(epoch_entropy)/len(epoch_entropy),
-                        "bc_loss": sum(epoch_bc_loss)/len(epoch_bc_loss),
+                        "bc_loss": bc_mean,
+                        "entropy_floor": floor,
+                        "kl_to_symbolic": bc_mean - floor,
+                        "mean_group_size": mean_group,
                         "walltime": time()-start_walltime,
                     } | log_context | {"global_update": num_updates+log_global_offset}
                     ).step()
