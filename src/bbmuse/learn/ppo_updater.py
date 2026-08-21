@@ -6,25 +6,39 @@ logger = logging.getLogger(__name__)
 
 from bbmuse.learn.policy_model import PolicyModel
 from bbmuse.learn.action_spaces import make_ce_loss
+from bbmuse.learn.metrics import estimate_entropy_floor
 
 
 class PPOUpdater:
     """
     Owns ONE agent's PPO optimization: the policy model reference, its Adam
-    optimizer, and the per-head CE loss functions. Knows nothing about
+    optimizer, the per-head CE loss functions, and the anchor diagnostics
+    (entropy floor / KL to the symbolic policy). Knows nothing about
     blackboards, probers, rollouts, or logging -- everything crossing this
-    boundary is plain tensors.
+    boundary is plain tensors in, a metrics dict out.
 
-    Shared by all learning modes (standalone sculpt, round-robin/IBR, IPPO/MAPPO),
-    so a fix to the clip, the BC weighting, or the loss
-    normalization lands in exactly one place -- which is also the
+    Shared by all learning modes (standalone sculpt, round-robin/IBR,
+    simultaneous/IPPO/MAPPO), so a fix to the clip, the BC weighting, or the
+    loss normalization lands in exactly one place -- which is also the
     methodological argument that scheduling differences between modes are
     not implementation differences.
 
+    The anchor diagnostics live here deliberately: the floor is computed
+    from the SAME states/oracle tensors and the SAME action-space
+    normalization as bc_loss, so the two can never silently diverge in
+    scale or data. (To drop them later: delete the floor block in update()
+    and the three metric keys.)
+
+    Critics, when they come:
+      - LOCAL critic (IPPO): will live inside this class -- it owns a value
+        net over this agent's states and computes `baseline` itself.
+      - CENTRAL critic (MAPPO): lives at the coordinator, which evaluates it
+        once over the full blackboard state and passes the result in via
+        `baseline`. Either way this signature does not change again.
+
     The optimizer persists across update() calls, so in round-robin mode an
     agent keeps its Adam momentum across rounds instead of resetting each
-    phase. (A critic for MAPPO does NOT live here: it is a separate
-    collaborator whose only effect is on the `advantages` passed in.)
+    phase.
     """
 
     def __init__(self,
@@ -41,8 +55,9 @@ class PPOUpdater:
         self.entropy_coef = entropy_coef
         self.clip_eps = clip_eps
 
+        self.action_spaces = policy_model.model.config["action_spaces"]
         self.loss_functions = {name: make_ce_loss(nvec)
-            for name, nvec in policy_model.model.config["action_spaces"].items()}
+            for name, nvec in self.action_spaces.items()}
         self.optimizer = torch.optim.Adam(policy_model.parameters(), lr=lr)
 
     def update(self,
@@ -50,17 +65,34 @@ class PPOUpdater:
         actions: dict,          # rep_name -> [T, n_segments] index tensors
         old_log_probs: dict,    # rep_name -> [T] log probs at collection time
         oracle: dict,           # rep_name -> [T, ...] one-hot targets from the symbolic module
-        advantages,             # [T] tensor, or None if no reward signal
+        returns,                # [T] (discounted, centered) return tensor, or None if no reward signal
+        baseline=None,          # optional [T] value estimate; advantages = returns - baseline
         epochs: int = 5,
         batch_size: int = 256,
     ) -> dict:
         """
         Runs the full epoch/minibatch PPO(+BC+entropy) optimization on one
-        rollout and returns a metrics dict. Reported metrics reflect the
+        rollout and returns a metrics dict. Optimization metrics reflect the
         LAST epoch only (deliberate: the state after the update, not a mean
-        over a moving policy).
+        over a moving policy); the anchor diagnostics are computed on the
+        full rollout before training.
         """
         assert epochs >= 1, "update() needs at least one epoch"
+
+        advantages = None
+        if returns is not None:
+            advantages = returns if baseline is None else returns - baseline
+
+        # entropy floor of the symbolic program AT THE STATES OF THIS ROLLOUT
+        # (recomputed per update: the visited-state mix moves as agents
+        # drift, so the floor is not a constant)
+        floors, _, mean_group = estimate_entropy_floor(
+            {k: v.detach().cpu().numpy() for k, v in states.items()},
+            {k: v.detach().cpu().numpy() for k, v in oracle.items()},
+            self.action_spaces,
+            miller_madow=True,   # groups are far smaller than in cloning
+        )
+        floor = sum(floors.values()) / len(floors)
 
         self.policy_model.train()
 
@@ -129,9 +161,14 @@ class PPOUpdater:
                 epoch_loss += batch_loss.item()
                 n_batches += 1
 
+        bc_mean = sum(epoch_bc_loss) / T  # per-sample mean (see weighting above)
+
         return {
             "weighted_loss": epoch_loss / n_batches,
             "policy_loss": sum(epoch_policy_loss) / len(epoch_policy_loss),
             "entropy": sum(epoch_entropy) / len(epoch_entropy),
-            "bc_loss": sum(epoch_bc_loss) / T,  # per-sample mean (see weighting above)
+            "bc_loss": bc_mean,
+            "entropy_floor": floor,
+            "kl_to_symbolic": bc_mean - floor,
+            "mean_group_size": mean_group,
         }

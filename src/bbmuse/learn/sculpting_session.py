@@ -18,20 +18,23 @@ from bbmuse.learn.rollout_collector import RolloutCollector
 from bbmuse.learn.ppo_updater import PPOUpdater
 from bbmuse.learn.policy_model import PolicyModel
 from bbmuse.learn.session_logger import SessionLogger
-from bbmuse.learn.metrics import estimate_entropy_floor
 
 
 class SculptingSession:
     """
     Single-agent composition: loads the clone, owns this agent's prober and
-    PPOUpdater, and per update asks the RolloutCollector for a rollout,
-    computes the entropy floor, runs the PPO update, logs, and checkpoints.
+    PPOUpdater, and per update asks the RolloutCollector for a rollout, runs
+    the PPO update (which also computes the anchor diagnostics), logs, and
+    checkpoints.
 
     Standalone (`bblearn sculpt X`): build() creates its own RewardCollector
     and a RolloutCollector over just this one prober.
-    Coordinated (round robin / IPPO): build(skip_collectors=True) creates and
+    Coordinated (round robin): build(skip_collectors=True) creates and
     patches ONLY the prober; the coordinator assigns a shared
     `rollout_collector` and `session_logger` before run().
+    The simultaneous coordinator uses built sessions as agent containers
+    (policy model, prober, updater, run dir) and drives their
+    `ppo_updater.update()` directly instead of calling run().
     """
 
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
@@ -127,25 +130,16 @@ class SculptingSession:
                 if update_i > 0:
                     logger.debug("Start collecting trajectories (exploration phase)..")
 
-                    # one shared rollout; this session uses only its own slice
+                    # one shared rollout; this session uses only its own slice.
+                    # NOTE: the collector's "advantages" are baseline-free
+                    # (discounted, centered) returns; the updater subtracts a
+                    # baseline if one exists (critics, later).
                     per_agent, rewards = self.rollout_collector.collect(quit_after=rollout_seconds)
-                    advantages = self.rollout_collector.compute_advantages(rewards)
+                    returns = self.rollout_collector.compute_advantages(rewards)
 
                     mine = per_agent[self.agent_name]
-                    adv = advantages[self.agent_name]
 
                     self.session_logger.log({f"rew_{name}": v.mean().item() for name, v in rewards.items()})
-
-                    # entropy floor of the symbolic program AT THE STATES OF THIS
-                    # ROLLOUT (recomputed per update: the visited-state mix moves
-                    # as agents drift, so the floor is not a constant)
-                    floors, _, mean_group = estimate_entropy_floor(
-                        {k: v.detach().cpu().numpy() for k, v in mine["states"].items()},
-                        {k: v.detach().cpu().numpy() for k, v in mine["oracle"].items()},
-                        self.policy_model.model.config["action_spaces"],
-                        miller_madow=True,   # groups are far smaller than in cloning
-                    )
-                    floor = sum(floors.values()) / len(floors)
 
                     logger.debug("Train policy model (learning phase)..")
                     metrics = self.ppo_updater.update(
@@ -153,16 +147,13 @@ class SculptingSession:
                         actions=mine["actions"],
                         old_log_probs=mine["old_log_probs"],
                         oracle=mine["oracle"],
-                        advantages=adv,
+                        returns=returns[self.agent_name],
                         epochs=epochs,
                         batch_size=batch_size,
                     )
 
                     self.session_logger.log(metrics | {
                         "num_updates": update_i,
-                        "entropy_floor": floor,
-                        "kl_to_symbolic": metrics["bc_loss"] - floor,
-                        "mean_group_size": mean_group,
                         "walltime": time(),
                     } | log_context | {"global_update": update_i + log_global_offset}
                     ).step()
