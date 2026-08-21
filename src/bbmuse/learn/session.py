@@ -71,6 +71,14 @@ class Session():
         rr = RoundRobinSculptingSession(self.project, self.module_manager, device=device)
         rr.build(args, module_names=args.modules)
         rr.run()
+        
+    def sculpt_sim(self, args):
+        device = self.get_desired_torch_device(args.device)
+        logger.debug("Starting SculptingSession with simultaneous updates..")
+        from bbmuse.learn.simultaneous_session import SimultaneousSculptingSession
+        sim = SimultaneousSculptingSession(self.project, self.module_manager, device=device)
+        sim.build(args, module_names=args.modules)
+        sim.run()
 
     def apply(self, args):
         from bbmuse.learn.apply_restore_session import ApplyRestoreSession
