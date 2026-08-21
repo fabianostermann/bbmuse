@@ -2,6 +2,7 @@ import logging
 
 import importlib.util
 from pathlib import Path
+import shutil
 
 import torch
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 class RewardCollector:
     """Evaluates all rewards once per timestep, after every module has written."""
 
-    def __init__(self, project, reward_fpaths, device=torch.device("cpu")):
+    def __init__(self, project, reward_fpaths, log_path=None, device=torch.device("cpu")):
         self.project = project
         self.device = device
 
@@ -25,6 +26,10 @@ class RewardCollector:
             try:
                 reward = Reward(path)
                 self.rewards.append(reward)
+                if log_path: # copy reward files for logging purposes
+                    destination = Path(log_path) / "rewards" / path.name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(path, destination)
             except Exception:
                 logger.exception("Ignored reward at: %s", path)
         if not self.rewards:
@@ -34,7 +39,7 @@ class RewardCollector:
         blackboard = self.project.get_blackboard()
         self.bb_view = _BlackboardView(blackboard, readable_keys=blackboard.list_content())
 
-        #TODO: determine last_handler from project
+        # determine last_handler from project
         exec_order = self.project.get_controller().execution_order
         last_handler = exec_order[-1]
         logger.debug("Activating reward collection on mod_handler %s. Exec order is: %s", last_handler, exec_order)

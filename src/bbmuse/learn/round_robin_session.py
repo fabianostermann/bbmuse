@@ -42,7 +42,7 @@ class RoundRobinSculptingSession:
         if not module_names:
             raise RuntimeError("No modules were given.")
 
-        # --- 1. all sessions + probers first (each patches its own handler once)
+        # all sessions + probers first (each patches its own handler once)
         for name in module_names:
             agent_args = copy(args)
             agent_args.module = [name]
@@ -53,12 +53,12 @@ class RoundRobinSculptingSession:
 
             logger.info("Built session for %s (prober active).", name)
 
-        # --- 2. reward collector last -> outermost wrapper on the final module
-        reward_fpaths = self.module_manager.get_available_rewards_filepaths()
-        self.reward_collector = RewardCollector(self.project, reward_fpaths, self.device)
-
         experiment_dir = self.module_manager.create_next_experiments_dir(tag=args.tag)
         self.session_logger = SessionLogger(experiment_dir)
+
+        # reward collector last -> outermost wrapper on the final module
+        reward_fpaths = self.module_manager.get_available_rewards_filepaths()
+        self.reward_collector = RewardCollector(self.project, reward_fpaths, log_path=experiment_dir, device=self.device)
 
         # TODO: make a experiments report file:
         # it should log that this is a round robin session

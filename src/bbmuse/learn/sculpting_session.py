@@ -64,7 +64,7 @@ class SculptingSession:
             self.reward_collector = None
         else:
             reward_fpaths = self.module_manager.get_available_rewards_filepaths()
-            self.reward_collector = RewardCollector(self.project, reward_fpaths, self.device)
+            self.reward_collector = RewardCollector(self.project, reward_fpaths, log_path=self.curr_run_dir, device=self.device)
 
     def run(self,
         num_updates: int = 100,
