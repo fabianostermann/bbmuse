@@ -161,7 +161,6 @@ class CloningSession:
         dataset = TensorDataset(*inputs.values(), *targets.values()) # TODO: do this manually without torch loaders. Copy from sculpt_session
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
-        start_walltime = time()
         logger.info("Starting training for %s epochs.", epochs)
         with tqdm(range(epochs+1)) as pbar:
             for epoch in pbar:
@@ -201,7 +200,7 @@ class CloningSession:
                         {f"loss__{name}": v for name, v in repr_losses.items()}
                         | {f"kl__{name}": v - self.entropy_floors[name] for name, v in repr_losses.items()}
                         | {"epoch": epoch, "loss": epoch_loss, "kl": kl,
-                        "walltime": time() - start_walltime}
+                        "walltime": time()}
                     ).step()
                     
                     pbar.set_description(f"epoch={epoch} loss={epoch_loss:.4f} kl={kl:.4f}")

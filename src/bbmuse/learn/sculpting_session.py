@@ -89,7 +89,6 @@ class SculptingSession:
 
         epoch_loss = 0.0
         with tqdm(range(num_updates+1)) as pbar:
-            start_walltime = time()
             for num_updates in pbar:
 
                 if num_updates > 0:
@@ -202,7 +201,7 @@ class SculptingSession:
                         "entropy_floor": floor,
                         "kl_to_symbolic": bc_mean - floor,
                         "mean_group_size": mean_group,
-                        "walltime": time()-start_walltime,
+                        "walltime": time(),
                     } | log_context | {"global_update": num_updates+log_global_offset}
                     ).step()
 
