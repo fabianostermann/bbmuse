@@ -21,6 +21,7 @@ class SessionLogger:
             logger.warning("pandas not available. Falling back to pickling.")
 
         self.run_directory = Path(run_directory) if run_directory else None
+        self.register_error_logfile()
 
         self.history = []
         self.current_step = {}
@@ -84,3 +85,16 @@ class SessionLogger:
 
         with open(filepath, "w") as f:
             json.dump(config_dict, f, indent=2)
+
+        
+    def register_error_logfile(self):
+        if not self.run_directory:
+            return
+
+        root_logger = logging.getLogger()
+
+        fh = logging.FileHandler(self.run_directory / "console.log", delay=True)
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+
+        root_logger.addHandler(fh)

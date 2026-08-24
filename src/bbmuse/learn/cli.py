@@ -17,9 +17,18 @@ def main():
         project = BbMuseProject(".")
     except Exception:
         logger.exception("Init project failed. 'bblearn' is supposed to be used at the root of a valid bbmuse project.")
+        logging.shutdown()
         sys.exit(1)
     
-    session = Session(project, args)
+    try:
+        session = Session(project, args)
+    except Exception:
+        logger.exception("The bblearn session failed with exception.")
+        logging.shutdown()
+        sys.exit(1)
+
+    logging.shutdown()
+    sys.exit(0)
 
 def process_args():
     common = argparse.ArgumentParser(add_help=False)
@@ -66,12 +75,14 @@ def process_args():
     sub_sculpt_rr.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
     sub_sculpt_rr.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
     sub_sculpt_rr.add_argument("--tag", type=str, default=None, help="A string tag that is appended to the filepath.")
+    sub_sculpt_rr.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="Override a run() parameter, e.g. --set bc_coef=0.3")
 
     sub_sculpt_sim = subparsers.add_parser("sculpt-sim", help='Run sculpt on multiple models in simultaneous mode.', parents=[common])
     sub_sculpt_sim.add_argument('modules', nargs='*', help="Path or name of modules.")
     sub_sculpt_sim.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
     sub_sculpt_sim.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
     sub_sculpt_sim.add_argument("--tag", type=str, default=None, help="A string tag that is appended to the filepath.")
+    sub_sculpt_sim.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="Override a run() parameter, e.g. --set bc_coef=0.3")
 
     sub_apply = subparsers.add_parser("apply", help='Construct a BbMuse module file that wraps a neural model but runs as native BbMuse module.', parents=[common])
     sub_apply.add_argument('module', nargs=1, help="Path or name of a module")
