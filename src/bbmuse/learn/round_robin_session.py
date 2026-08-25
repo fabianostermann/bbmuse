@@ -28,121 +28,123 @@ class RoundRobinSculptingSession:
     """
 
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
-        self.project = project
-        self.module_manager = module_manager
-        self.device = device
+        raise NotImplementedError("Do not call, currently not maintained.")
 
-        self.sessions = {}          # canonical agent name -> SculptingSession
-        self.reward_collector = None
-        self.rollout_collector = None
+    #     self.project = project
+    #     self.module_manager = module_manager
+    #     self.device = device
 
-    # ------------------------------------------------------------------ build
+    #     self.sessions = {}          # canonical agent name -> SculptingSession
+    #     self.reward_collector = None
+    #     self.rollout_collector = None
 
-    def build(self, args, module_names):
-        """
-        args:         the parsed sculpt args (module/tag/dry_run/...); the
-                      `module` field is overridden per agent.
-        module_names: agent names, e.g. ["AgentA", "AgentB", "AgentC", "AgentD"].
-                      Order does NOT need to match execution order; sessions
-                      are keyed by the handler's canonical name regardless of
-                      how the user typed it.
-        """
-        if self.sessions:
-            raise RuntimeError("build() called twice -- probers would be double-patched.")
-        if not module_names:
-            raise RuntimeError("No modules were given.")
+    # # ------------------------------------------------------------------ build
 
-        # 1. all sessions + probers first (each patches its own handler once)
-        for name in module_names:
-            agent_args = copy(args)
-            agent_args.module = [name]
+    # def build(self, args, module_names):
+    #     """
+    #     args:         the parsed sculpt args (module/tag/dry_run/...); the
+    #                   `module` field is overridden per agent.
+    #     module_names: agent names, e.g. ["AgentA", "AgentB", "AgentC", "AgentD"].
+    #                   Order does NOT need to match execution order; sessions
+    #                   are keyed by the handler's canonical name regardless of
+    #                   how the user typed it.
+    #     """
+    #     if self.sessions:
+    #         raise RuntimeError("build() called twice -- probers would be double-patched.")
+    #     if not module_names:
+    #         raise RuntimeError("No modules were given.")
 
-            session = SculptingSession(self.project, self.module_manager, self.device)
-            session.build(agent_args, skip_collectors=True)
-            self.sessions[session.agent_name] = session
+    #     # 1. all sessions + probers first (each patches its own handler once)
+    #     for name in module_names:
+    #         agent_args = copy(args)
+    #         agent_args.module = [name]
 
-            logger.info("Built session for %s (prober active).", session.agent_name)
+    #         session = SculptingSession(self.project, self.module_manager, self.device)
+    #         session.build(agent_args, skip_collectors=True)
+    #         self.sessions[session.agent_name] = session
 
-        experiment_dir = self.module_manager.create_next_experiments_dir(tag=args.tag)
-        self.session_logger = SessionLogger(experiment_dir)
+    #         logger.info("Built session for %s (prober active).", session.agent_name)
 
-        # 2. reward collector last -> outermost wrapper on the final module
-        reward_fpaths = self.module_manager.get_available_rewards_filepaths()
-        self.reward_collector = RewardCollector(self.project, reward_fpaths,
-                                                log_path=experiment_dir, device=self.device)
+    #     experiment_dir = self.module_manager.create_next_experiments_dir(tag=args.tag)
+    #     self.session_logger = SessionLogger(experiment_dir)
 
-        # 3. one shared rollout pipeline over all probers
-        probers = {name: session.prober for name, session in self.sessions.items()}
-        self.rollout_collector = RolloutCollector(self.project, probers,
-                                                  self.reward_collector, device=self.device)
+    #     # 2. reward collector last -> outermost wrapper on the final module
+    #     reward_fpaths = self.module_manager.get_available_rewards_filepaths()
+    #     self.reward_collector = RewardCollector(self.project, reward_fpaths,
+    #                                             log_path=experiment_dir, device=self.device)
 
-        # experiment report: what runs, with which rewards, and where each
-        # agent's sculpt dir lives (so results can be relocated later);
-        # completed with the schedule parameters in run()
-        self._experiment_info = {
-            "mode": "round_robin (iterated best response)",
-            "agents": list(self.sessions),
-            "rewards": [p.name for p in reward_fpaths],
-            "sculpt_run_dirs": {n: str(s.curr_run_dir) for n, s in self.sessions.items()},
-        }
-        self.session_logger.write_config_to_disk(self._experiment_info)
+    #     # 3. one shared rollout pipeline over all probers
+    #     probers = {name: session.prober for name, session in self.sessions.items()}
+    #     self.rollout_collector = RolloutCollector(self.project, probers,
+    #                                               self.reward_collector, device=self.device)
 
-        for session in self.sessions.values():
-            session.rollout_collector = self.rollout_collector
-            session.session_logger = self.session_logger
+    #     # experiment report: what runs, with which rewards, and where each
+    #     # agent's sculpt dir lives (so results can be relocated later);
+    #     # completed with the schedule parameters in run()
+    #     self._experiment_info = {
+    #         "mode": "round_robin (iterated best response)",
+    #         "agents": list(self.sessions),
+    #         "rewards": [p.name for p in reward_fpaths],
+    #         "sculpt_run_dirs": {n: str(s.curr_run_dir) for n, s in self.sessions.items()},
+    #     }
+    #     self.session_logger.write_config_to_disk(self._experiment_info)
 
-        logger.info("RoundRobin built for %s agents: %s",
-                    len(self.sessions), ", ".join(self.sessions))
-        return self
+    #     for session in self.sessions.values():
+    #         session.rollout_collector = self.rollout_collector
+    #         session.session_logger = self.session_logger
 
-    # -------------------------------------------------------------------- run
+    #     logger.info("RoundRobin built for %s agents: %s",
+    #                 len(self.sessions), ", ".join(self.sessions))
+    #     return self
 
-    def run(self,
-        rounds: int = 5,
-        num_updates: int = 20,
-        shuffle: bool = False,
-        seed: int = None,
-        **run_kwargs,
-    ):
-        """
-        rounds:      how many full passes over all agents.
-        num_updates: PER-PHASE update budget (explicit here so the global
-                     step counter can advance without guessing the session
-                     default).
-        shuffle:     randomize agent order within each round; HAPPO uses a
-                     random permutation per update for exactly this reason --
-                     a fixed order biases who gets to move first. `seed`
-                     makes shuffled orders reproducible across runs.
-        run_kwargs:  forwarded to SculptingSession.run() (epochs, lr,
-                     batch_size, entropy_coef, bc_coef, rollout_seconds, ...).
-        """
-        if not self.sessions:
-            raise RuntimeError("Call build() before run().")
+    # # -------------------------------------------------------------------- run
 
-        self.session_logger.write_config_to_disk(self._experiment_info | {
-            "rounds": rounds, "num_updates_per_phase": num_updates,
-            "shuffle": shuffle, "seed": seed, "run_kwargs": dict(run_kwargs),
-        })
+    # def run(self,
+    #     rounds: int = 5,
+    #     num_updates: int = 20,
+    #     shuffle: bool = False,
+    #     seed: int = None,
+    #     **run_kwargs,
+    # ):
+    #     """
+    #     rounds:      how many full passes over all agents.
+    #     num_updates: PER-PHASE update budget (explicit here so the global
+    #                  step counter can advance without guessing the session
+    #                  default).
+    #     shuffle:     randomize agent order within each round; HAPPO uses a
+    #                  random permutation per update for exactly this reason --
+    #                  a fixed order biases who gets to move first. `seed`
+    #                  makes shuffled orders reproducible across runs.
+    #     run_kwargs:  forwarded to SculptingSession.run() (epochs, lr,
+    #                  batch_size, entropy_coef, bc_coef, rollout_seconds, ...).
+    #     """
+    #     if not self.sessions:
+    #         raise RuntimeError("Call build() before run().")
 
-        rng = random.Random(seed)
-        names = list(self.sessions)
-        global_update = 0
+    #     self.session_logger.write_config_to_disk(self._experiment_info | {
+    #         "rounds": rounds, "num_updates_per_phase": num_updates,
+    #         "shuffle": shuffle, "seed": seed, "run_kwargs": dict(run_kwargs),
+    #     })
 
-        for rnd in range(1, rounds + 1):
-            order = names[:]
-            if shuffle:
-                rng.shuffle(order)
-            logger.info("=== Round %s/%s -- order: %s ===", rnd, rounds, " -> ".join(order))
+    #     rng = random.Random(seed)
+    #     names = list(self.sessions)
+    #     global_update = 0
 
-            for name in order:
-                logger.info("--- Round %s: sculpting %s (others frozen) ---", rnd, name)
+    #     for rnd in range(1, rounds + 1):
+    #         order = names[:]
+    #         if shuffle:
+    #             rng.shuffle(order)
+    #         logger.info("=== Round %s/%s -- order: %s ===", rnd, rounds, " -> ".join(order))
 
-                self.sessions[name].run(
-                    num_updates=num_updates,
-                    log_context={"round": rnd, "agent": name},
-                    log_global_offset=global_update,
-                    **run_kwargs,
-                )
-                global_update += num_updates
+    #         for name in order:
+    #             logger.info("--- Round %s: sculpting %s (others frozen) ---", rnd, name)
 
-        logger.info("Round-robin finished after %s rounds.", rounds)
+    #             self.sessions[name].run(
+    #                 num_updates=num_updates,
+    #                 log_context={"round": rnd, "agent": name},
+    #                 log_global_offset=global_update,
+    #                 **run_kwargs,
+    #             )
+    #             global_update += num_updates
+
+    #     logger.info("Round-robin finished after %s rounds.", rounds)

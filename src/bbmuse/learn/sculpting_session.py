@@ -104,83 +104,84 @@ class SculptingSession:
     # -------------------------------------------------------------------- run
 
     def run(self,
-        num_updates: int = 100,
-        epochs: int = 5,
-        lr: float = 1e-3,
-        batch_size: int = 256,
-        entropy_coef = 0.0,
-        expert_coef = 0.1,
-        checkpoint_interval: int = 10,
-        rollout_seconds: float = 8,
-        log_context = {},
-        log_global_offset = 0,
+        # num_updates: int = 100,
+        # epochs: int = 5,
+        # lr: float = 1e-3,
+        # batch_size: int = 256,
+        # entropy_coef = 0.0,
+        # expert_coef = 0.1,
+        # checkpoint_interval: int = 10,
+        # rollout_seconds: float = 8,
+        # log_context = {},
+        # log_global_offset = 0,
     ) -> None:
+        raise NotImplementedError("Do not call, currently not maintained.")
 
-        kwargs = {k: v for k, v in locals().items() if k != 'self'}
+        # kwargs = {k: v for k, v in locals().items() if k != 'self'}
 
-        clone_info = {"clone_info": {"clone_epochs": self.loaded_checkpoint.get_epoch(),
-                                     "clone_loss": self.loaded_checkpoint.get_loss()}}
-        self.session_logger.write_config_to_disk({"run_kwargs": kwargs} | clone_info,
-                                                 overwrite_dir=self.curr_run_dir)
+        # clone_info = {"clone_info": {"clone_epochs": self.loaded_checkpoint.get_epoch(),
+        #                              "clone_loss": self.loaded_checkpoint.get_loss()}}
+        # self.session_logger.write_config_to_disk({"run_kwargs": kwargs} | clone_info,
+        #                                          overwrite_dir=self.curr_run_dir)
 
-        if self.rollout_collector is None:
-            raise RuntimeError("No rollout_collector assigned. Either build without "
-                               "skip_collectors or let the coordinator assign a shared one.")
+        # if self.rollout_collector is None:
+        #     raise RuntimeError("No rollout_collector assigned. Either build without "
+        #                        "skip_collectors or let the coordinator assign a shared one.")
 
-        if self.ppo_updater is None:
-            self.ppo_updater = PPOUpdater(self.policy_model, lr=lr, expert_coef=expert_coef,
-                                          ref_model = self.ref_model,
-                                          entropy_coef=entropy_coef, device=self.device)
+        # if self.ppo_updater is None:
+        #     self.ppo_updater = PPOUpdater(self.policy_model, lr=lr, expert_coef=expert_coef,
+        #                                   ref_model = self.ref_model,
+        #                                   entropy_coef=entropy_coef, device=self.device)
 
-        metrics = {"weighted_loss": 0.0}
-        with tqdm(range(num_updates + 1)) as pbar:
-            for update_i in pbar:
+        # metrics = {"weighted_loss": 0.0}
+        # with tqdm(range(num_updates + 1)) as pbar:
+        #     for update_i in pbar:
 
-                if update_i > 0:
-                    logger.debug("Start collecting trajectories (exploration phase)..")
+        #         if update_i > 0:
+        #             logger.debug("Start collecting trajectories (exploration phase)..")
 
-                    # one shared rollout; this session uses only its own slice.
-                    # NOTE: the collector's "advantages" are baseline-free
-                    # (discounted, centered) returns; the updater subtracts a
-                    # baseline if one exists (critics, later).
-                    per_agent, rewards = self.rollout_collector.collect(quit_after=rollout_seconds)
-                    returns = self.rollout_collector.compute_advantages(rewards)
+        #             # one shared rollout; this session uses only its own slice.
+        #             # NOTE: the collector's "advantages" are baseline-free
+        #             # (discounted, centered) returns; the updater subtracts a
+        #             # baseline if one exists (critics, later).
+        #             per_agent, rewards = self.rollout_collector.collect(quit_after=rollout_seconds)
+        #             returns = self.rollout_collector.compute_advantages(rewards)
 
-                    mine = per_agent[self.agent_name]
+        #             mine = per_agent[self.agent_name]
 
-                    self.session_logger.log({f"rew_{name}": v.mean().item() for name, v in rewards.items()})
+        #             self.session_logger.log({f"rew_{name}": v.mean().item() for name, v in rewards.items()})
 
-                    logger.debug("Train policy model (learning phase)..")
-                    metrics = self.ppo_updater.update(
-                        states=mine["states"],
-                        actions=mine["actions"],
-                        old_log_probs=mine["old_log_probs"],
-                        expert=mine["expert"],
-                        returns=returns[self.agent_name],
-                        epochs=epochs,
-                        batch_size=batch_size,
-                    )
+        #             logger.debug("Train policy model (learning phase)..")
+        #             metrics = self.ppo_updater.update(
+        #                 states=mine["states"],
+        #                 actions=mine["actions"],
+        #                 old_log_probs=mine["old_log_probs"],
+        #                 expert=mine["expert"],
+        #                 returns=returns[self.agent_name],
+        #                 epochs=epochs,
+        #                 batch_size=batch_size,
+        #             )
 
-                    self.session_logger.log(metrics | {
-                        "num_updates": update_i,
-                        "walltime": time(),
-                    } | log_context | {"global_update": update_i + log_global_offset}
-                    ).step()
+        #             self.session_logger.log(metrics | {
+        #                 "num_updates": update_i,
+        #                 "walltime": time(),
+        #             } | log_context | {"global_update": update_i + log_global_offset}
+        #             ).step()
 
-                    pbar.set_description(f"update={update_i:04d} loss={metrics['weighted_loss']:.6f}")
+        #             pbar.set_description(f"update={update_i:04d} loss={metrics['weighted_loss']:.6f}")
 
-                # save intermediate policy checkpoints
-                if not self.dry_run:
-                    if checkpoint_interval and update_i % checkpoint_interval == 0:
-                        ckpt_path = self.module_manager.get_checkpoint_path(
-                            self.curr_run_dir, update_i + log_global_offset)
-                        Checkpoint(ckpt_path).save(self.policy_model.model, update_i,
-                                                   metrics["weighted_loss"], self.ppo_updater.optimizer)
-                    self.session_logger.write_to_disk()
+        #         # save intermediate policy checkpoints
+        #         if not self.dry_run:
+        #             if checkpoint_interval and update_i % checkpoint_interval == 0:
+        #                 ckpt_path = self.module_manager.get_checkpoint_path(
+        #                     self.curr_run_dir, update_i + log_global_offset)
+        #                 Checkpoint(ckpt_path).save(self.policy_model.model, update_i,
+        #                                            metrics["weighted_loss"], self.ppo_updater.optimizer)
+        #             self.session_logger.write_to_disk()
 
-        # save final policy
-        if not self.dry_run:
-            final_path = self.module_manager.get_final_model_path(self.curr_run_dir)
-            Checkpoint(final_path).save(self.policy_model.model, update_i,
-                                        metrics["weighted_loss"], self.ppo_updater.optimizer)
-            self.session_logger.write_to_disk()
+        # # save final policy
+        # if not self.dry_run:
+        #     final_path = self.module_manager.get_final_model_path(self.curr_run_dir)
+        #     Checkpoint(final_path).save(self.policy_model.model, update_i,
+        #                                 metrics["weighted_loss"], self.ppo_updater.optimizer)
+        #     self.session_logger.write_to_disk()

@@ -56,27 +56,27 @@ class Session():
         cs.build(args)
         cs.run(epochs=args.epochs) # TODO build smart parameter loader (config file? also a formatted command-line option?)
 
-    def sculpt(self, args):
-        device = self.get_desired_torch_device(args.device)
-        logger.debug("Starting SculptingSession..")
-        from bbmuse.learn.sculpting_session import SculptingSession
-        cs = SculptingSession(self.project, self.module_manager, device=device)
-        cs.build(args)
-        cs.run()
+    # def sculpt(self, args):
+    #     device = self.get_desired_torch_device(args.device)
+    #     logger.debug("Starting SculptingSession..")
+    #     from bbmuse.learn.sculpting_session import SculptingSession
+    #     cs = SculptingSession(self.project, self.module_manager, device=device)
+    #     cs.build(args)
+    #     cs.run()
         
-    def sculpt_rr(self, args):
-        device = self.get_desired_torch_device(args.device)
-        logger.debug("Starting SculptingSession with RoundRobin..")
-        from bbmuse.learn.round_robin_session import RoundRobinSculptingSession
+    # def sculpt_rr(self, args):
+    #     device = self.get_desired_torch_device(args.device)
+    #     logger.debug("Starting SculptingSession with RoundRobin..")
+    #     from bbmuse.learn.round_robin_session import RoundRobinSculptingSession
         
-        logger.debug("Parsing and checking overrides (--set)..")
-        overrides = parse_overrides(args.set)
-        check_overrides(RoundRobinSculptingSession.run, overrides)
+    #     logger.debug("Parsing and checking overrides (--set)..")
+    #     overrides = parse_overrides(args.set)
+    #     check_overrides(RoundRobinSculptingSession.run, overrides)
 
-        logger.debug("Build and run RoundRobinSculptingSession..")
-        rr = RoundRobinSculptingSession(self.project, self.module_manager, device=device)
-        rr.build(args, module_names=args.modules)
-        rr.run(**overrides)
+    #     logger.debug("Build and run RoundRobinSculptingSession..")
+    #     rr = RoundRobinSculptingSession(self.project, self.module_manager, device=device)
+    #     rr.build(args, module_names=args.modules)
+    #     rr.run(**overrides)
         
     def sculpt_sim(self, args):
         device = self.get_desired_torch_device(args.device)
