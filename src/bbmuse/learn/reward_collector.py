@@ -87,10 +87,12 @@ class Reward:
 
         self.module = self._import_module()
 
-        if not hasattr(self.module, "_reward"):
+        if not hasattr(self.module, "_reward") or not callable(getattr(self.module, "_reward")):
             raise AttributeError(
                 f"Reward module '{self.name}' must define a '_reward' function."
             )
+
+        self._weight = float(getattr(self.module, "_weight", 1.0))
 
     def _import_module(self):
         spec = importlib.util.spec_from_file_location(self.name, self.reward_filepath)
@@ -104,6 +106,9 @@ class Reward:
 
     def call_reward(self, bb):
         return self.module._reward(bb)
+
+    def get_weight(self):
+        return self._weight
 
     def get_name(self):
         return self.name

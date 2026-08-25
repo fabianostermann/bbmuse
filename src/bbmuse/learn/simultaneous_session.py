@@ -101,13 +101,15 @@ class SimultaneousSculptingSession:
         self.rollout_collector = RolloutCollector(self.project, probers,
                                                   self.reward_collector, device=self.device)
 
+        self.reward_weights = {reward.name: reward.get_weight() for reward in self.reward_collector.rewards}
+
         # experiment report: what runs, with which rewards, and where each
         # agent's sculpt dir lives; completed with the schedule parameters
         # in run()
         self._experiment_info = {
             "mode": "simultaneous",
             "agents": list(self.sessions),
-            "rewards": [p.name for p in reward_fpaths],
+            "rewards": self.reward_weights,
             "sculpt_run_dirs": {n: str(s.curr_run_dir) for n, s in self.sessions.items()},
         }
         self.session_logger.write_config_to_disk(self._experiment_info)
@@ -178,7 +180,7 @@ class SimultaneousSculptingSession:
                     # (discounted, centered) returns; a central critic later
                     # turns into a `baseline=` argument below.
                     per_agent, rewards = self.rollout_collector.collect(quit_after=rollout_seconds)
-                    returns = self.rollout_collector.compute_advantages(rewards)
+                    returns = self.rollout_collector.compute_advantages(rewards, self.reward_weights)
 
                     logger.debug("Train policy models (learning phase)..")
                     for name, session in self.sessions.items():
