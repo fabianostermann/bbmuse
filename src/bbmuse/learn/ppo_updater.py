@@ -169,6 +169,7 @@ class PPOUpdater:
             n_batches = 0
             epoch_policy_loss = []
             epoch_entropy = []
+            epoch_entropy_per_head = {}
             epoch_expert_loss = []
             epoch_ref_fwd = []
             epoch_ref_rev = []
@@ -201,6 +202,7 @@ class PPOUpdater:
                     epoch_policy_loss.append(policy_loss.item())
 
                     entropy = torch.mean(entropies[head_name])
+                    epoch_entropy_per_head.setdefault(head_name, []).append(entropy)
                     epoch_entropy.append(entropy.item())
 
                     # symbolic anchor: what the policy predicts vs what the
@@ -251,6 +253,7 @@ class PPOUpdater:
             "kl_to_expert": expert_mean - floor,
             "mean_group_size": mean_group,
         }
+        metrics |= { "entropy__"+name: sum(entropy)/len(entropy) for name, entropy in epoch_entropy_per_head.items() }
         if epoch_ref_fwd:
             # kl_to_ref_forward is the one on the same axis as kl_to_expert
             metrics["kl_to_ref_forward"] = sum(epoch_ref_fwd) / T

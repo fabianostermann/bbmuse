@@ -135,6 +135,7 @@ class SimultaneousSculptingSession:
         expert_coef = 0.0,
         entropy_coef = 0.0,
         checkpoint_interval: int = 10,
+        override_reward_weights: dict = {},
         rollout_seconds: float = 8,
     ) -> None:
         """
@@ -148,6 +149,9 @@ class SimultaneousSculptingSession:
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
 
         self.session_logger.write_config_to_disk(self._experiment_info | {"run_kwargs": kwargs})
+
+        print(override_reward_weights)
+        self.reward_collector.override_weights(override_reward_weights)
 
         # per-agent config into each sculpt dir (analogous to what
         # SculptingSession.run() writes when it drives the loop itself)
@@ -186,7 +190,7 @@ class SimultaneousSculptingSession:
                     for name, session in self.sessions.items():
                         mine = per_agent[name]
 
-                        self.session_logger.log({f"rew_{rname}": v.mean().item()
+                        self.session_logger.log({f"reward__{rname}": v.mean().item()
                                                  for rname, v in rewards.items()})
 
                         metrics = session.ppo_updater.update(

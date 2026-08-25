@@ -73,6 +73,11 @@ class RewardCollector:
         self.buffer.clear()
         return out
 
+    def override_weights(self, weight_dict: dict):
+        for reward in self.rewards:
+            if reward.name in weight_dict.keys():
+                reward._weight = weight_dict[reward.name]
+
 
 class Reward:
     def __init__(self, reward_filepath: str | Path):
