@@ -42,7 +42,7 @@ class SculptingSession:
         self.module_manager = module_manager
         self.device = device
 
-        # created lazily on the first run() (needs lr/bc_coef/... from run
+        # created lazily on the first run() (needs lr/expert_coef/... from run
         # kwargs) and then REUSED, so Adam momentum survives across IBR
         # rounds. Changed hyperparameters on a later run() call are ignored.
         self.ppo_updater = None
@@ -71,14 +71,21 @@ class SculptingSession:
             self.curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler, self.tag)
         self.session_logger = SessionLogger(self.curr_run_dir)
 
-        # load clone from disk -- TODO: create mode that runs without BC model (init just a random model)
+        # load clone from disk -- TODO: create mode that runs without expert model (init just a random model)
         clone_dirs = self.module_manager.get_available_clone_run_dirs(self.module_handler)
         clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
         self.loaded_checkpoint = Checkpoint(clone_final_path, self.device).load()
         clone_model = self.loaded_checkpoint.make_model()
         self.policy_model = PolicyModel(clone_model)
         self.policy_model.to(self.device)
-        logger.info("Loaded model from: %s", clone_final_path)
+        logger.info("Loaded policy model to be trained from: %s", clone_final_path)
+
+        # load reference model from same checkpoint
+        loaded_ref_checkpoint = Checkpoint(clone_final_path, self.device).load()
+        clone_ref_model = loaded_ref_checkpoint.make_model()
+        self.ref_model = PolicyModel(clone_ref_model)
+        self.ref_model.to(self.device)
+        logger.info("Loaded ref model for anchoring from: %s", clone_final_path)
 
         # make module prober (patches this module's call_update exactly once)
         self.prober = PolicyProber(self.policy_model, self.module_handler, self.project.get_blackboard())
@@ -102,12 +109,13 @@ class SculptingSession:
         lr: float = 1e-3,
         batch_size: int = 256,
         entropy_coef = 0.0,
-        bc_coef = 0.1,
+        expert_coef = 0.1,
         checkpoint_interval: int = 10,
         rollout_seconds: float = 8,
         log_context = {},
         log_global_offset = 0,
     ) -> None:
+
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
 
         clone_info = {"clone_info": {"clone_epochs": self.loaded_checkpoint.get_epoch(),
@@ -120,7 +128,8 @@ class SculptingSession:
                                "skip_collectors or let the coordinator assign a shared one.")
 
         if self.ppo_updater is None:
-            self.ppo_updater = PPOUpdater(self.policy_model, lr=lr, bc_coef=bc_coef,
+            self.ppo_updater = PPOUpdater(self.policy_model, lr=lr, expert_coef=expert_coef,
+                                          ref_model = self.ref_model,
                                           entropy_coef=entropy_coef, device=self.device)
 
         metrics = {"weighted_loss": 0.0}
@@ -146,7 +155,7 @@ class SculptingSession:
                         states=mine["states"],
                         actions=mine["actions"],
                         old_log_probs=mine["old_log_probs"],
-                        oracle=mine["oracle"],
+                        expert=mine["expert"],
                         returns=returns[self.agent_name],
                         epochs=epochs,
                         batch_size=batch_size,

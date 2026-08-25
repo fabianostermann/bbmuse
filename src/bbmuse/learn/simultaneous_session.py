@@ -81,6 +81,7 @@ class SimultaneousSculptingSession:
             agent_args = copy(args)
             agent_args.module = [name]
 
+            # TODO Refactor as SculptingSession for single agent training became unnecessary
             session = SculptingSession(self.project, self.module_manager, self.device)
             session.build(agent_args, skip_collectors=True)
             self.sessions[session.agent_name] = session
@@ -124,10 +125,13 @@ class SimultaneousSculptingSession:
     def run(self,
         num_updates: int = 100,
         epochs: int = 5,
-        lr: float = 1e-3,
         batch_size: int = 256,
+        lr: float = 1e-3,
+        clip_eps: float = 0.2,
+        ref_coef = 0.0,
+        kl_direction: str = "reverse", ## forward or reverse
+        expert_coef = 0.0,
         entropy_coef = 0.0,
-        bc_coef = 0.1,
         checkpoint_interval: int = 10,
         rollout_seconds: float = 8,
     ) -> None:
@@ -156,8 +160,11 @@ class SimultaneousSculptingSession:
         # keeps its Adam momentum here as well
         for session in self.sessions.values():
             if session.ppo_updater is None:
-                session.ppo_updater = PPOUpdater(session.policy_model, lr=lr, bc_coef=bc_coef,
-                                                 entropy_coef=entropy_coef, device=self.device)
+                session.ppo_updater = PPOUpdater(session.policy_model, ref_model=session.ref_model,
+                                                 ref_coef=ref_coef, kl_direction=kl_direction,
+                                                 expert_coef=expert_coef, entropy_coef=entropy_coef,
+                                                 lr=lr, clip_eps=clip_eps,
+                                                 device=self.device)
 
         last_loss = {name: 0.0 for name in self.sessions}
         with tqdm(range(num_updates + 1)) as pbar:
@@ -184,7 +191,7 @@ class SimultaneousSculptingSession:
                             states=mine["states"],
                             actions=mine["actions"],
                             old_log_probs=mine["old_log_probs"],
-                            oracle=mine["oracle"],
+                            expert=mine["expert"],
                             returns=returns[name],
                             epochs=epochs,
                             batch_size=batch_size,

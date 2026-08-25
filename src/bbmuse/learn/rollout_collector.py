@@ -44,7 +44,7 @@ class RolloutCollector:
               "states":        rep -> [T, ...]  (requires + uses, packed floats)
               "actions":       rep -> [T, n_segments]  (sampled indices)
               "old_log_probs": rep -> [T]
-              "oracle":        rep -> [T, ...]  (symbolic module's one-hot output)
+              "expert":        rep -> [T, ...]  (symbolic module's one-hot output)
           }
           rewards[reward_name] = [T] raw reward tensor
 
@@ -81,7 +81,7 @@ class RolloutCollector:
                                   if k.startswith("actions__")},
                 "old_log_probs": {k.split("__", 1)[1]: v for k, v in arrs.items()
                                   if k.startswith("log_probs__")},
-                "oracle":        {k.split("__", 1)[1]: v for k, v in arrs.items()
+                "expert":        {k.split("__", 1)[1]: v for k, v in arrs.items()
                                   if k.startswith("provides__")},
             }
 
