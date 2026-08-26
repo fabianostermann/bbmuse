@@ -5,6 +5,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
+import random
 import numpy as np
 import torch
 import torch.nn as nn
@@ -127,6 +128,7 @@ class CloningSession:
         lr: float = 1e-3,
         batch_size: int = 512,
         checkpoint_interval: int = None,
+        seed: int = None,
     ) -> None:
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
 
@@ -136,6 +138,9 @@ class CloningSession:
         
         session_logger = SessionLogger(curr_run_dir)
         session_logger.write_config_to_disk(kwargs)
+
+        if seed is not None:
+            torch.manual_seed(seed); np.random.seed(seed); random.seed(seed)
 
         loss_functions = {name: make_ce_loss(nvec)
             for name, nvec in self.clone_model.config["action_spaces"].items()}

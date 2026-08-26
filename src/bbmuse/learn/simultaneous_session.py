@@ -3,6 +3,8 @@ from copy import copy
 
 from tqdm import tqdm
 
+import random
+import numpy as np
 import torch
 
 from time import time
@@ -142,6 +144,7 @@ class SimultaneousSculptingSession:
         checkpoint_interval: int = 10,
         override_reward_weights: dict = {},
         rollout_seconds: float = 8,
+        seed: int = None,
     ) -> None:
         """
         num_updates counts GLOBAL updates (= rollouts); every agent updates
@@ -152,8 +155,10 @@ class SimultaneousSculptingSession:
             raise RuntimeError("Call build() before run().")
 
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
-
         self.session_logger.write_config_to_disk(self._experiment_info | {"run_kwargs": kwargs})
+
+        if seed is not None:
+            torch.manual_seed(seed); np.random.seed(seed); random.seed(seed)
 
         # overwrite file-located weights with args-provided weights
         self.reward_collector.override_weights(override_reward_weights)
