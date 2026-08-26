@@ -210,11 +210,10 @@ class SimultaneousSculptingSession:
                         last_loss[name] = metrics["weighted_loss"]
 
                         self.session_logger.log(metrics | {
-                            "num_updates": update_i,
                             "walltime": time(),
                             "agent": name,
                             "global_update": update_i,
-                        }).step()
+                        }).step(heads=session.ppo_updater.loss_functions.keys())
 
                     mean_loss = sum(last_loss.values()) / len(last_loss)
                     pbar.set_description(f"update={update_i:04d} mean_loss={mean_loss:.6f}")

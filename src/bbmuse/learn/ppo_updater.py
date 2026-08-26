@@ -303,8 +303,6 @@ class PPOUpdater:
             # kl_to_ref_forward is the one on the same axis as kl_to_expert
             metrics["kl_to_ref_forward"] = agg["kl_to_ref_forward"]
             metrics["kl_to_ref_reverse"] = agg["kl_to_ref_reverse"]
-            metrics["kl_direction"] = self.kl_direction   # constant, but keeps
-            #   concatenated ablation CSVs self-describing
 
         # per-head columns: every metric above, plus the per-head floor and the
         # per-head kl_to_expert it makes interpretable
