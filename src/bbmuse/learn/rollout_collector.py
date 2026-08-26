@@ -36,7 +36,7 @@ class RolloutCollector:
 
     # ---------------------------------------------------------------- collect
 
-    def collect(self, quit_after: float = 8, run_mode: int = 0):
+    def collect(self, rollout_cycles: float = 2000):
         """
         Run one rollout and return (per_agent, rewards):
 
@@ -56,7 +56,7 @@ class RolloutCollector:
             prober.policy_model.eval()  # deactivate dropout/BatchNorm everywhere
 
         with torch.no_grad():
-            self.project.run(quit_after=quit_after, run_mode=run_mode)
+            self.project.run(quit_after_cycles=rollout_cycles, run_mode=0)
 
         raw = {name: prober.flush() for name, prober in self.probers.items()}
         raw_rewards = self.reward_collector.flush()

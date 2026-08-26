@@ -143,7 +143,7 @@ class SimultaneousSculptingSession:
         entropy_coef = 0.0,
         checkpoint_interval: int = 10,
         override_reward_weights: dict = {},
-        rollout_seconds: float = 8,
+        rollout_cycles: float = 2000,
         seed: int = None,
     ) -> None:
         """
@@ -193,7 +193,7 @@ class SimultaneousSculptingSession:
                     # NOTE: the collector's "advantages" are baseline-free
                     # (discounted, centered) returns; a central critic later
                     # turns into a `baseline=` argument below.
-                    per_agent, rewards = self.rollout_collector.collect(quit_after=rollout_seconds)
+                    per_agent, rewards = self.rollout_collector.collect(rollout_cycles=rollout_cycles)
                     returns = self.rollout_collector.compute_advantages(rewards, self.reward_weights)
 
                     logger.debug("Train policy models (learning phase)..")
