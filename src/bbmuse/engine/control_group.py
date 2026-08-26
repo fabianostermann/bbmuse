@@ -37,8 +37,9 @@ class ControlGroup:
 
         self.blackboard_views = bb_views
 
-    def start(self, run_mode=0):
+    def start(self, run_mode=0, quit_after_cycles=None):
         self.run_mode = run_mode
+        self.quit_after_cycles = quit_after_cycles
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
 
@@ -96,6 +97,11 @@ class ControlGroup:
 
             delta_time = time() - start_time
             cycle_count += 1
+
+            if self.quit_after_cycles:
+                if cycle_count >= self.quit_after_cycles:
+                    self.logger.info("Requested number of cycles (%s) reached. Halting..", cycle_count)
+                    self.halt()
 
             #self.logger.debug(f"End of cycle {cycle_count}, delta={delta_time:.5f}")
 

@@ -82,7 +82,7 @@ class Controller:
 
         self.execution_order, self.dependencies = exec_order, graph
 
-    def run(self, quit_after=-1, run_mode=0):
+    def run(self, quit_after=-1, run_mode=0, quit_after_cycles=None):
 
         logger.info("Init threads..")
 
@@ -96,7 +96,7 @@ class Controller:
 
         for group in self.groups:
             logger.info("Attempting to start thread '%s'..", group.name)
-            group.start(run_mode=run_mode)
+            group.start(run_mode=run_mode, quit_after_cycles=quit_after_cycles)
 
         self._running = True
         start_time = time()
@@ -113,7 +113,8 @@ class Controller:
                 for group in self.groups:
                     if not group.is_alive():
                         if run_mode <= 0:# NORMAL mode
-                            logger.error("Group %s stopped running. Not in PERFORM mode, hence halt program..", group.name)
+                            if not quit_after_cycles:
+                                logger.error("Group %s stopped running. Not in PERFORM mode, hence halt program..", group.name)
                             self.halt()
                         else: # PERFORM mode
                             logger.warning("Group %s stopped running in PERFORM mode. Restarting..", group.name)
