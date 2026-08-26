@@ -32,6 +32,11 @@ class PPOUpdater:
         distribution. The ablation arm: does anchoring to a learned
         approximation suffice?
 
+    Both coefficients accept either a float (broadcast to every head) or a
+    {head_name: float} dict, so a single head's anchor can be strengthened or
+    switched off. A head at coefficient 0 still counts toward the /n_heads
+    divisor and is still fully logged -- it just does not enter the gradient.
+
     KL DIRECTION is itself an ablation factor (`kl_direction`):
       "forward" = KL(ref || policy), mass-covering. Same direction as
           kl_to_expert, so the two anchors sit on one Pareto axis.
@@ -72,28 +77,39 @@ class PPOUpdater:
     def __init__(self,
         policy_model: PolicyModel,
         ref_model: PolicyModel = None,   # frozen initial clone; None disables the arm
-        ref_coef: float = 0.0,           # weight for the reference (clone) KL anchor
+        ref_coef: float | dict = 0.0,    # weight for the reference (clone) KL anchor (or dict of weights per head)
         kl_direction: str = "forward",   # "forward" = KL(ref||policy), "reverse" = KL(policy||ref)
-        expert_coef: float = 0.1,            # weight for the symbolic anchor
+        expert_coef: float | dict = 0.1, # weight for the symbolic anchor (or dict of weights per head)
         entropy_coef: float = 0.0,
         lr: float = 1e-3,
         clip_eps: float = 0.2,
         device=torch.device("cpu"),
     ):
         self.policy_model = policy_model
-        self.ref_model = ref_model
-        self.ref_coef = ref_coef
-        if kl_direction not in ("forward", "reverse"):
-            raise ValueError(f"kl_direction must be 'forward' or 'reverse', got {kl_direction!r}")
-        self.kl_direction = kl_direction
-        self.expert_coef = expert_coef
-        self.entropy_coef = entropy_coef
-        self.clip_eps = clip_eps
-        self.device = device
-
         self.action_spaces = policy_model.model.config["action_spaces"]
         self.loss_functions = {name: make_ce_loss(nvec)
             for name, nvec in self.action_spaces.items()}
+
+        self.ref_model = ref_model
+
+        if not isinstance(ref_coef, dict):
+            ref_coef = {name: ref_coef for name in self.loss_functions}
+        self.ref_coef = ref_coef
+        assert self.ref_coef.keys() >= self.loss_functions.keys(), f"Ref coefs missing for: {self.loss_functions.keys() - self.ref_coef.keys()}"
+
+        if kl_direction not in ("forward", "reverse"):
+            raise ValueError(f"kl_direction must be 'forward' or 'reverse', got {kl_direction!r}")
+        self.kl_direction = kl_direction
+
+        if not isinstance(expert_coef, dict):
+            expert_coef = {name: expert_coef for name in self.loss_functions}
+        self.expert_coef = expert_coef
+        assert self.expert_coef.keys() >= self.loss_functions.keys(), f"Expert coefs missing for: {self.loss_functions.keys() - self.expert_coef.keys()}"
+
+        self.entropy_coef = entropy_coef
+
+        self.clip_eps = clip_eps
+        self.device = device
 
         self.kl_functions = None
         if ref_model is not None:
@@ -110,7 +126,7 @@ class PPOUpdater:
             self.ref_model.eval()
             for p in self.ref_model.parameters():
                 p.requires_grad_(False)
-        elif ref_coef:
+        elif any(self.ref_coef.values()):
             raise ValueError("ref_coef > 0 but no ref_model was given.")
 
         self.optimizer = torch.optim.Adam(policy_model.parameters(), lr=lr)
@@ -131,6 +147,10 @@ class PPOUpdater:
         the LAST epoch only (deliberate: the state after the update, not a
         mean over a moving policy); the entropy floor is computed on the full
         rollout before training.
+
+        Every scalar metric is also emitted per head as "<metric>__<head>",
+        since with per-head anchor coefficients the aggregate cannot say WHICH
+        head tightened or drifted.
         """
         assert epochs >= 1, "update() needs at least one epoch"
 
@@ -166,16 +186,15 @@ class PPOUpdater:
             indices = torch.randperm(T, device=self.device)
 
             epoch_loss = 0.0
-            n_batches = 0
-            epoch_policy_loss = []
-            epoch_entropy = []
-            epoch_entropy_per_head = {}
-            epoch_expert_loss = []
-            epoch_ref_fwd = []
-            epoch_ref_rev = []
+            epoch_batch_n = []    # samples per batch, for the weighted means below
+            epoch_per_head = {}   # metric name -> head name -> [one value per batch]
+
+            def log_head(metric, head, value):
+                epoch_per_head.setdefault(metric, {}).setdefault(head, []).append(value)
 
             for batch_start in range(0, T, batch_size):
                 idx = indices[batch_start:batch_start + batch_size]
+                epoch_batch_n.append(len(idx))
 
                 batch_states     = {k: v[idx] for k, v in states.items()}
                 batch_old_lp     = {k: v[idx] for k, v in old_log_probs.items()}
@@ -199,21 +218,25 @@ class PPOUpdater:
                         # PPO clip loss
                         clipped = torch.clamp(r, 1 - self.clip_eps, 1 + self.clip_eps)
                         policy_loss = -torch.mean(torch.min(r * A, clipped * A))
-                    epoch_policy_loss.append(policy_loss.item())
+                        # PPO trust-region health, logged only where an advantage
+                        # signal exists at all: what share of samples had their
+                        # ratio clipped, and how far the current policy has drifted
+                        # from the one that collected the data (ratio -> 1 = no
+                        # drift). A clip fraction creeping past ~0.2-0.3 means
+                        # `epochs` or `lr` is too high for this rollout.
+                        with torch.no_grad():
+                            log_head("clip_fraction", head_name,
+                                ((r - 1.0).abs() > self.clip_eps).float().mean().item())
+                            log_head("mean_ratio", head_name, r.mean().item())
+                    log_head("policy_loss", head_name, policy_loss.item())
 
                     entropy = torch.mean(entropies[head_name])
-                    epoch_entropy_per_head.setdefault(head_name, []).append(entropy)
-                    epoch_entropy.append(entropy.item())
+                    log_head("entropy", head_name, entropy.item())
 
                     # symbolic anchor: what the policy predicts vs what the
                     # symbolic module actually did (one-hot samples)
                     expert_loss = self.loss_functions[head_name](pred_actions[head_name], batch_expert[head_name])
-                    # METRIC ONLY: weighted by sample count and per-head share, so
-                    # sum(...)/T is the per-sample mean averaged over heads -- the
-                    # same scale as the entropy floor it gets subtracted from. The
-                    # GRADIENT below stays unweighted on purpose: each batch should
-                    # step with comparable magnitude regardless of (partial) batch size.
-                    epoch_expert_loss.append(expert_loss.item() * len(idx) / n_heads)
+                    log_head("expert_loss", head_name, expert_loss.item())
 
                     # reference anchor: analytic KL against the frozen clone.
                     # BOTH directions are always computed and logged when a
@@ -224,40 +247,70 @@ class PPOUpdater:
                     if ref_logits is not None:
                         fwd, rev = self.kl_functions[head_name](
                             ref_logits[head_name][idx], pred_actions[head_name])
-                        epoch_ref_fwd.append(fwd.item() * len(idx) / n_heads)
-                        epoch_ref_rev.append(rev.item() * len(idx) / n_heads)
+                        log_head("kl_to_ref_forward", head_name, fwd.item())
+                        log_head("kl_to_ref_reverse", head_name, rev.item())
                         ref_kl = fwd if self.kl_direction == "forward" else rev
 
                     batch_loss += sum([
                         policy_loss,
+                        self.ref_coef[head_name] * ref_kl,
+                        self.expert_coef[head_name] * expert_loss,
                         self.entropy_coef * -entropy,
-                        self.expert_coef * expert_loss,
-                        self.ref_coef * ref_kl,
                     ]) / n_heads  # decouples head count from hyperparameter tuning
 
                 self.optimizer.zero_grad()
                 batch_loss.backward()  # one backward through the full shared graph
                 self.optimizer.step()
 
-                epoch_loss += batch_loss.item()
-                n_batches += 1
+                epoch_loss += batch_loss.item() * len(idx)
 
-        expert_mean = sum(epoch_expert_loss) / T  # per-sample mean (see weighting above)
+        # METRICS ONLY, from here down. Each per-head list holds one value per
+        # batch in batch order, so it pairs with epoch_batch_n: weighting by
+        # batch size (which sums to T) turns it into a per-sample mean, and
+        # averaging over heads puts it on the same scale as the entropy floor.
+        # The GRADIENT above stays unweighted on purpose: each batch should step
+        # with comparable magnitude regardless of (partial) batch size.
+        def head_means(values_by_head: dict) -> dict:
+            out = {}
+            for head, values in values_by_head.items():
+                assert len(values) == len(epoch_batch_n), (
+                    f"metric logged {len(values)} times over {len(epoch_batch_n)} "
+                    f"batches -- a per-head metric is logged conditionally on "
+                    f"something that varies BETWEEN batches, so the weights no "
+                    f"longer line up")
+                out[head] = sum(v * n for v, n in zip(values, epoch_batch_n)) / T
+            return out
+
+        per_head = {metric: head_means(v) for metric, v in epoch_per_head.items()}
+        # over n_heads rather than len(v), to match the /n_heads in the loss
+        agg = {metric: sum(v.values()) / n_heads for metric, v in per_head.items()}
+
+        expert_mean = agg["expert_loss"]
 
         metrics = {
-            "weighted_loss": epoch_loss / n_batches,
-            "policy_loss": sum(epoch_policy_loss) / len(epoch_policy_loss),
-            "entropy": sum(epoch_entropy) / len(epoch_entropy),
+            "weighted_loss": epoch_loss / T,
+            "policy_loss": agg["policy_loss"],
+            "entropy": agg["entropy"],
             "expert_loss": expert_mean,
             "entropy_floor": floor,
             "kl_to_expert": expert_mean - floor,
             "mean_group_size": mean_group,
         }
-        metrics |= { "entropy__"+name: sum(entropy)/len(entropy) for name, entropy in epoch_entropy_per_head.items() }
-        if epoch_ref_fwd:
+        if "clip_fraction" in agg:
+            metrics["clip_fraction"] = agg["clip_fraction"]
+            metrics["mean_ratio"] = agg["mean_ratio"]
+        if "kl_to_ref_forward" in agg:
             # kl_to_ref_forward is the one on the same axis as kl_to_expert
-            metrics["kl_to_ref_forward"] = sum(epoch_ref_fwd) / T
-            metrics["kl_to_ref_reverse"] = sum(epoch_ref_rev) / T
+            metrics["kl_to_ref_forward"] = agg["kl_to_ref_forward"]
+            metrics["kl_to_ref_reverse"] = agg["kl_to_ref_reverse"]
             metrics["kl_direction"] = self.kl_direction   # constant, but keeps
             #   concatenated ablation CSVs self-describing
+
+        # per-head columns: every metric above, plus the per-head floor and the
+        # per-head kl_to_expert it makes interpretable
+        metrics |= {f"{metric}__{head}": value
+            for metric, heads in per_head.items() for head, value in heads.items()}
+        metrics |= {f"entropy_floor__{head}": f for head, f in floors.items()}
+        metrics |= {f"kl_to_expert__{head}": value - floors[head]
+            for head, value in per_head["expert_loss"].items() if head in floors}
         return metrics
