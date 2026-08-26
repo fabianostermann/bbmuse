@@ -88,7 +88,11 @@ class SimultaneousSculptingSession:
 
             logger.info("Built session for %s (prober active).", session.agent_name)
 
-        experiment_dir = self.module_manager.create_next_experiments_dir(tag=args.tag)
+        self.dry_run = args.dry_run
+
+        experiment_dir = None
+        if not self.dry_run:
+            experiment_dir = self.module_manager.create_next_experiments_dir(tag=args.tag)
         self.session_logger = SessionLogger(experiment_dir)
 
         # 2. reward collector last -> outermost wrapper on the final module
