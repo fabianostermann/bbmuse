@@ -150,7 +150,7 @@ class SimultaneousSculptingSession:
 
         self.session_logger.write_config_to_disk(self._experiment_info | {"run_kwargs": kwargs})
 
-        print(override_reward_weights)
+        # overwrite file-located weights with args-provided weights
         self.reward_collector.override_weights(override_reward_weights)
 
         # per-agent config into each sculpt dir (analogous to what
