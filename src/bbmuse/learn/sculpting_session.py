@@ -71,9 +71,19 @@ class SculptingSession:
             self.curr_run_dir = self.module_manager.create_next_sculpt_run_dir(self.module_handler, self.tag)
         self.session_logger = SessionLogger(self.curr_run_dir)
 
-        # load clone from disk -- TODO: create mode that runs without expert model (init just a random model)
+        # get clone path to load
         clone_dirs = self.module_manager.get_available_clone_run_dirs(self.module_handler)
-        clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
+        if args.clone is None:
+            clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
+        else:
+            filtered_dirs = self.module_manager.filter_dirs(clone_dirs, args.clone)
+            assert filtered_dirs, f"For {self.module_handler.get_name()}, no directory matches given clone identifier: {args.clone}"
+            if len(filtered_dirs) > 1:
+                logger.warning("More than one matching directory found: %s; taking last.", filtered_dirs)
+            clone_final_path = self.module_manager.get_final_model_path(filtered_dirs[-1])
+
+
+        # load clone from disk -- TODO: create mode that runs without expert model (init just a random model)
         self.loaded_checkpoint = Checkpoint(clone_final_path, self.device).load()
         clone_model = self.loaded_checkpoint.make_model()
         self.policy_model = PolicyModel(clone_model)

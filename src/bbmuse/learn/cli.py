@@ -83,6 +83,7 @@ def process_args():
     sub_sculpt_sim.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
     sub_sculpt_sim.add_argument("--tag", type=str, default=None, help="A string tag that is appended to the filepath.")
     sub_sculpt_sim.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="Override a run() parameter, e.g. --set bc_coef=0.3")
+    sub_sculpt_sim.add_argument("--clone", type=str, default=None, help="Determine the clone to load by complete path name, id, or tag.")
 
     sub_apply = subparsers.add_parser("apply", help='Construct a BbMuse module file that wraps a neural model but runs as native BbMuse module.', parents=[common])
     sub_apply.add_argument('module', nargs=1, help="Path or name of a module")

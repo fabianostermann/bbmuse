@@ -111,6 +111,7 @@ class SimultaneousSculptingSession:
             "agents": list(self.sessions),
             "rewards": self.reward_weights,
             "sculpt_run_dirs": {n: str(s.curr_run_dir) for n, s in self.sessions.items()},
+            "loaded_clones": {n: str(s.loaded_checkpoint.path) for n, s in self.sessions.items()},
         }
         self.session_logger.write_config_to_disk(self._experiment_info)
 

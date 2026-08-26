@@ -166,6 +166,29 @@ class ModuleManager():
         """ Intended for use with clones and sculpt directories """
         return Path(run_dir) / "final.pt"
 
+    def filter_dirs(self, directories, identifier):
+        """ find directories that match given identifier (1. exact, 2. id, 3. tag) """
+        identifier = str(identifier).strip()
+        ident_path = Path(identifier)
+        exact, by_id, by_tag = [], [], []
+
+        for directory in directories:
+            path = Path(directory)
+            if path == ident_path or path.name == ident_path.name: # check complete paths
+                exact.append(directory)
+                continue
+
+            dir_id, sep, dir_tag = path.name.partition("_")
+            if not dir_id.isdigit():
+                continue
+
+            if identifier.isdigit() and int(identifier) == int(dir_id):
+                by_id.append(directory)
+            elif sep and dir_tag and identifier == dir_tag: # check for tag
+                by_tag.append(directory)
+
+        return exact or by_id or by_tag
+
     def get_backbones_dir(self):
         return self._backbones_dir
 
