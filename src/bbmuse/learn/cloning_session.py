@@ -24,20 +24,25 @@ from bbmuse.learn.action_spaces import make_ce_loss
 from bbmuse.learn.metrics import estimate_entropy_floor
 
 class CloningSession:
-    def __init__(self, project, module_manager, device=torch.device("cpu")):
+    def __init__(self, project, module_manager, args, device=torch.device("cpu")):
         self.project = project
         self.blackboard = self.project.get_blackboard()
         self.module_manager = module_manager
         self.device = device
 
-    def build(self, args):
+        self.tag = args.tag
+        self.dry_run = args.dry_run
+        self.backbone = args.backbone
+
         self.module_handler = self.module_manager.identify_module(args.module[0])
         if not self.module_handler:
             logger.error("Module handler not found: %s", args.module[0])
             sys.exit(1)
+        
+        self.is_build = False
 
-        self.tag = args.tag
-        self.dry_run = args.dry_run
+    def build(self):
+        logger.info("Building session..")
 
         # load packed representations from recorded episodes
         ep_paths = self.module_manager.get_available_episode_paths(self.module_handler)
@@ -68,7 +73,7 @@ class CloningSession:
         input_dims_dict = {k: v[1:] for k, v in (shapes["uses"] | shapes["requires"]).items()}
         output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
         action_spaces = self.get_action_spaces(self.module_handler)
-        path_to_backbone = self.get_path_to_backbone(args.backbone)
+        path_to_backbone = self.get_path_to_backbone(self.backbone)
         self.clone_model = ModuleClone(input_dims_dict, output_dims_dict, action_spaces, path_to_backbone)
 
         self.entropy_floors, self.soft_targets, mean_group = estimate_entropy_floor(
@@ -78,6 +83,8 @@ class CloningSession:
         )
         logger.info("Entropy floor per rep: %s (mean group size=%.1f)",
                     {k: round(v, 4) for k, v in self.entropy_floors.items()}, mean_group)
+
+        self.is_build = True
 
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
@@ -130,6 +137,12 @@ class CloningSession:
         checkpoint_interval: int = None,
         seed: int = None,
     ) -> None:
+        if seed is not None: # set seed before build
+            torch.manual_seed(seed); np.random.seed(seed); random.seed(seed)
+
+        if not self.is_build:
+            self.build()
+
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
 
         curr_run_dir = None
@@ -138,9 +151,6 @@ class CloningSession:
         
         session_logger = SessionLogger(curr_run_dir)
         session_logger.write_config_to_disk(kwargs)
-
-        if seed is not None:
-            torch.manual_seed(seed); np.random.seed(seed); random.seed(seed)
 
         loss_functions = {name: make_ce_loss(nvec)
             for name, nvec in self.clone_model.config["action_spaces"].items()}

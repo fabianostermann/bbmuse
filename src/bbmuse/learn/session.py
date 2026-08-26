@@ -57,8 +57,7 @@ class Session():
         overrides = parse_overrides(args.set)
         check_overrides(CloningSession.run, overrides)
 
-        cs = CloningSession(self.project, self.module_manager, device=device)
-        cs.build(args)
+        cs = CloningSession(self.project, self.module_manager, args, device=device)
         cs.run(**overrides)
 
     # def sculpt(self, args):
