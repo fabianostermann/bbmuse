@@ -61,7 +61,7 @@ def process_args():
     sub_clone.add_argument("--backbone", default=None, type=str, help="Path to a backbone py file")
     sub_clone.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
     sub_clone.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
-    sub_clone.add_argument("--epochs", type=int, default=20, help="Number of epochs to train.")
+    sub_clone.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="Override a run() parameter, e.g. --set bc_coef=0.3")
     sub_clone.add_argument("--tag", type=str, default=None, help="A string tag that is appended to the filepath.")
 
     # sub_sculpt = subparsers.add_parser("sculpt", help='Refine one model based on heuristic constraints and human feedback.', parents=[common])

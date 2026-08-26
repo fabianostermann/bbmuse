@@ -52,9 +52,14 @@ class Session():
         device = self.get_desired_torch_device(args.device)
         logger.debug("Starting CloningSession..")
         from bbmuse.learn.cloning_session import CloningSession
+        
+        logger.debug("Parsing and checking overrides (--set)..")
+        overrides = parse_overrides(args.set)
+        check_overrides(CloningSession.run, overrides)
+
         cs = CloningSession(self.project, self.module_manager, device=device)
         cs.build(args)
-        cs.run(epochs=args.epochs) # TODO build smart parameter loader (config file? also a formatted command-line option?)
+        cs.run(**overrides)
 
     # def sculpt(self, args):
     #     device = self.get_desired_torch_device(args.device)
