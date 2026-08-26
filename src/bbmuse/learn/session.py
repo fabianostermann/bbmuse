@@ -93,7 +93,7 @@ class Session():
 
         logger.debug("Build and run SimultaneousSculptingSession..")
         sim = SimultaneousSculptingSession(self.project, self.module_manager, device=device)
-        sim.build(args, module_names=args.modules)
+        sim.build(args, module_names=args.modules) # TODO: Remove active build call and call from inside run() (see CloningSession)
         sim.run(**overrides)
         
     def apply(self, args):
