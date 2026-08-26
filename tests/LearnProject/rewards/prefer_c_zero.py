@@ -13,6 +13,7 @@
 # trigger that edge case on purpose rather than leaving it for the music
 # domain to find.
 
+_weight = 0.5
 
 def _reward(bb):
     return 1.0 if bb.RepC.value == 0 else 0.0

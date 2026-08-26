@@ -17,6 +17,7 @@
 # IMPORTANT: keep only ONE reward file in the rewards dir per experiment --
 # all *.py files there are loaded and averaged (see parallel_coordination.py).
 
+_weight = 0.0
 
 def _reward(bb):
     return 1.0 if bb.RepA.value == bb.RepC.value else 0.0
