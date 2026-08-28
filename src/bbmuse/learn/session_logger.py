@@ -134,7 +134,7 @@ class SessionLogger:
         root_logger = logging.getLogger()
 
         fh = logging.FileHandler(self.run_directory / "console.log", delay=True)
-        fh.setLevel(logging.INFO)
+        fh.setLevel(logging.WARNING)
         fh.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
 
         root_logger.addHandler(fh)
