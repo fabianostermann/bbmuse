@@ -107,15 +107,12 @@ class SimultaneousSculptingSession:
         self.rollout_collector = RolloutCollector(self.project, probers,
                                                   self.reward_collector, device=self.device)
 
-        self.reward_weights = {reward.name: reward.get_weight() for reward in self.reward_collector.rewards}
-
         # experiment report: what runs, with which rewards, and where each
         # agent's sculpt dir lives; completed with the schedule parameters
         # in run()
         self._experiment_info = {
             "mode": "simultaneous",
             "agents": list(self.sessions),
-            "rewards": self.reward_weights,
             "sculpt_run_dirs": {n: str(s.curr_run_dir) for n, s in self.sessions.items()},
             "loaded_clones": {n: str(s.loaded_checkpoint.path) for n, s in self.sessions.items()},
         }
@@ -154,14 +151,16 @@ class SimultaneousSculptingSession:
         if not self.sessions:
             raise RuntimeError("Call build() before run().")
 
+        # overwrite file-located weights with args-provided weights
+        self.reward_collector.override_weights(override_reward_weights)
+        self._experiment_info["rewards"] = {r.name: r.get_weight() for r in self.reward_collector.rewards}
+
+        # write experiment info to disk
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
         self.session_logger.write_config_to_disk(self._experiment_info | {"run_kwargs": kwargs})
 
         if seed is not None:
             torch.manual_seed(seed); np.random.seed(seed); random.seed(seed)
-
-        # overwrite file-located weights with args-provided weights
-        self.reward_collector.override_weights(override_reward_weights)
 
         # per-agent config into each sculpt dir (analogous to what
         # SculptingSession.run() writes when it drives the loop itself)
@@ -194,7 +193,7 @@ class SimultaneousSculptingSession:
                     # (discounted, centered) returns; a central critic later
                     # turns into a `baseline=` argument below.
                     per_agent, rewards = self.rollout_collector.collect(rollout_cycles=rollout_cycles)
-                    returns = self.rollout_collector.compute_advantages(rewards, self.reward_weights)
+                    returns = self.rollout_collector.compute_advantages(rewards)
 
                     logger.debug("Train policy models (learning phase)..")
                     for name, session in self.sessions.items():

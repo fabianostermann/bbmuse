@@ -90,7 +90,7 @@ class RolloutCollector:
 
     # ----------------------------------------------------------- advantages
 
-    def compute_advantages(self, rewards: dict, weights: dict = None, discount_factor: float = 0.9) -> dict:
+    def compute_advantages(self, rewards: dict, discount_factor: float = 0.9) -> dict:
         """
         rewards: dict reward_name -> [T] raw reward tensor (from collect()).
         Returns dict agent_name -> [T] advantage tensor, or None per agent if
@@ -109,15 +109,18 @@ class RolloutCollector:
             logger.warning("Received no rewards.")
             return {name: None for name in self.probers}
 
-        weights = weights or {}
+        weights = {reward.name: reward.get_weight() for reward in self.reward_collector.rewards} or {}
         unknown = set(weights) - set(rewards)
         if unknown:
             logger.warning("Weights given for rewards that are not loaded: %s", unknown)
 
         names = list(rewards)                      # single source of truth for order
-        w = torch.tensor([float(weights.get(n, 1.0)) for n in names],
+        w = torch.tensor([float(weights.get(n)) for n in names],
                          dtype=torch.float32, device=next(iter(rewards.values())).device)
         logger.debug("Reward weights: %s", dict(zip(names, w.tolist())))
+
+        if not w.any():
+            logger.warning("All reward weights are zero -> advantages will be zero.")
 
         stacked = torch.stack([rewards[n] for n in names], dim=0)
         stacked = stacked - stacked.mean(dim=1, keepdim=True)   # center each signal
