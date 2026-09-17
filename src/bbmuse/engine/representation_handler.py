@@ -59,6 +59,20 @@ class RepresentationHandler(BaseHandler):
     #def __str__(self):
     #    return f"<Repr:{self.get_name()}>"
 
+    def has_merge(self):
+        """ Whether this representation can arbitrate between several contributors. """
+        return callable(getattr(self.get_component(), "_merge", None))
+
+    def call_merge(self, contributions):
+        """
+        Hand the contributions to the representation so it can decide.
+
+        `contributions` is {module name: that module's scratch copy}, in
+        execution order. _merge() writes the outcome into the representation's
+        own globals, the same way _unpack() does.
+        """
+        self.get_component()._merge(contributions)
+
     def call_validate(self):
         self._call_validate_on(self.get_component())
 

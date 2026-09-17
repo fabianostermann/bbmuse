@@ -19,6 +19,8 @@ class Controller:
         self.module_handlers = module_handlers
         self.blackboard = blackboard
         self.failed_representation_names = list(failed_representation_names)
+        self.contributors = {}      # repr -> [modules], only for merged representations
+        self.last_contributor = {}  # repr -> the contributor that triggers the merge
 
         self.groups = self.make_groups()
         
@@ -60,7 +62,7 @@ class Controller:
                     handler, ", ".join(handler.get_uses()))
 
         for group in self.groups:
-            group.build(self.execution_order)
+            group.build(self.execution_order, self.contributors, self.last_contributor)
 
     def report_cross_group_requires(self, strict=False):
         """
@@ -104,10 +106,32 @@ class Controller:
                     if repr in self.failed_representation_names:
                         raise RuntimeError(f"Representation {repr}, provided by module {handler}, failed to build. See the logged traceback above for the cause.")
                     raise RuntimeError(f"Representation {repr} is unknown to the blackboard, thus cannot be provided by module {handler}. No definition file for it was found.")
-                if not repr in provides_map.keys():
-                    provides_map[repr] = handler
-                else:
-                    raise RuntimeError(f"Duplicate provide: Representation {repr} provided by modules {handler} and {provides_map[repr]}.")
+                provides_map.setdefault(repr, []).append(handler)
+
+        self.contributors = {}
+        for repr, providers in provides_map.items():
+            if len(providers) == 1:
+                continue
+            rep_handler = self.blackboard.get(repr)
+            if not rep_handler.has_merge():
+                names = ", ".join(str(p) for p in providers)
+                raise RuntimeError(
+                    f"Duplicate provide: Representation {repr} is provided by {names}. "
+                    f"Give {repr} a _merge(contributions) function to arbitrate between "
+                    f"them, or let only one module provide it.")
+            groups = {p.get_group() for p in providers}
+            if len(groups) > 1:
+                raise RuntimeError(
+                    f"Representation {repr} is provided by modules in different control "
+                    f"groups ({', '.join(sorted(groups))}). Contributors to one "
+                    f"representation must share a group, so that they can be merged "
+                    f"within a single cycle.")
+            self.contributors[repr] = list(providers)
+            logger.info("Representation %s is contributed to by %s and merged by %s._merge().",
+                repr, ", ".join(str(p) for p in providers), repr)
+
+        # for the rest of the build, one representative provider per name is enough
+        provides_map = {repr: providers[0] for repr, providers in provides_map.items()}
         logger.debug("Map repr -> provider: %s", provides_map)
 
         # DELAYED names must exist; unlike REQUIRES they add no ordering edge,
@@ -125,11 +149,16 @@ class Controller:
 
         for handler in self.module_handlers:
             for req in handler.get_requires():
-                provider = provides_map.get(req, None)
-                if provider is None:
+                providers = self.contributors.get(req)
+                if providers is None:
+                    provider = provides_map.get(req, None)
+                    providers = [] if provider is None else [provider]
+                if not providers:
                     logger.debug("No module provides representation %s which module %s requires. Therefore it is irrelevant to the execution order.", req, handler)
-                else:
-                    if not handler in graph[provider]:
+                for provider in providers:
+                    # a consumer must wait for every contributor, so that it
+                    # never sees a partially assembled representation
+                    if provider is not handler and handler not in graph[provider]:
                         graph[provider].append(handler)
                         num_of_consumers[handler] += 1
         logger.debug("Map provider -> list of consumers: %s", graph)
@@ -163,6 +192,9 @@ class Controller:
             raise RuntimeError("Cycle detected in module dependencies")
 
         self.execution_order, self.dependencies = exec_order, graph
+        # which contributor is last in the order, i.e. when the merge happens
+        self.last_contributor = {repr: max(providers, key=exec_order.index)
+            for repr, providers in self.contributors.items()}
 
     def run(self, quit_after=-1, run_mode=0):
 
@@ -266,6 +298,9 @@ class Controller:
             for name in handler.get_delayed()})
         views = {handler: self.blackboard.create_view(handler)
             for handler in self.module_handlers}
+        scratch_views = {name: {handler: views[handler]._rep_views[name]
+                for handler in providers}
+            for name, providers in self.contributors.items()}
         trigger_views = {handler: self.blackboard.create_trigger_view(handler)
             for handler in self.module_handlers if handler.has_trigger()}
 
@@ -284,6 +319,11 @@ class Controller:
                 for view in views.values():
                     view._set_delayed_snapshots(snapshots)
 
+                for rep_name, by_handler in scratch_views.items():
+                    live = self.blackboard.get(rep_name)
+                    for rep_view in by_handler.values():
+                        rep_view._rebind(snapshot_component(live.get_component()), read_only=False)
+
                 for mod_handler in self.execution_order:
                     if not mod_handler.is_active():
                         continue
@@ -294,6 +334,13 @@ class Controller:
                     if not fired:
                         continue
                     mod_handler.call_update(views[mod_handler])
+
+                    for rep_name, last in self.last_contributor.items():
+                        if last is mod_handler:
+                            self.blackboard.get(rep_name).call_merge(
+                                {handler.get_name(): view._representation
+                                    for handler, view in scratch_views[rep_name].items()})
+
                     if run_mode < 0: # DEBUG mode
                         for rep_name in mod_handler.get_provides():
                             self.blackboard.get(rep_name).call_validate()

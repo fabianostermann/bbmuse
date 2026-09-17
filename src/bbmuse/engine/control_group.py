@@ -28,8 +28,15 @@ class ControlGroup:
         
         self.logger.info("Created group '%s'. Members are: %s", self.name, self.module_handlers)
 
-    def build(self, exec_order):
+    def build(self, exec_order, contributors=None, last_contributor=None):
         self.execution_order = [handler for handler in exec_order if handler in self.module_handlers]
+        # representations several of this group's modules contribute to
+        self.contributors = {name: providers
+            for name, providers in (contributors or {}).items()
+            if all(p in self.module_handlers for p in providers)}
+        self.last_contributor = {name: handler
+            for name, handler in (last_contributor or {}).items()
+            if name in self.contributors}
         self.build_blackboard_views()
         # resolved once, so the hot path only acquires ready-made locks
         self.data_locks = {handler: self.blackboard.data_locks_for(handler)
@@ -52,6 +59,11 @@ class ControlGroup:
 
         self.blackboard_views = bb_views
         self.trigger_views = trigger_views
+        # each contributor writes into its own scratch copy, so contributions
+        # are independent and the live representation only changes at the merge
+        self.scratch_views = {name: {handler: bb_views[handler]._rep_views[name]
+                for handler in providers}
+            for name, providers in self.contributors.items()}
 
     def start(self, run_mode=0):
         self.run_mode = run_mode
@@ -83,6 +95,7 @@ class ControlGroup:
             # DELAYED read is the same value for all of them and cannot move
             # while the cycle runs
             self.take_delayed_snapshots()
+            self.reset_contribution_scratch()
 
             try:
                 for mod_handler in self.execution_order:
@@ -113,6 +126,7 @@ class ControlGroup:
                                     before = self.snapshot_read_only(mod_handler)
                                     mod_handler.call_update(self.blackboard_views[mod_handler])
                                     self.check_read_only_untouched(mod_handler, before)
+                                self.merge_contributions_after(mod_handler)
 
                         if fired and self.run_mode < 0: # DEBUG mode
                             try:
@@ -158,6 +172,35 @@ class ControlGroup:
         delay = min(waits)
         if delay > 0:
             sleep(delay)
+
+    def reset_contribution_scratch(self):
+        """
+        Point every contributor at a fresh private copy of the representation.
+
+        Each starts the cycle from the current live value and writes only into
+        its own copy, so contributors neither see nor clobber each other and
+        the order they happen to run in does not decide the outcome.
+        """
+        for rep_name, views_by_handler in self.scratch_views.items():
+            live = self.blackboard.get(rep_name)
+            with live.get_data_lock():
+                for rep_view in views_by_handler.values():
+                    rep_view._rebind(snapshot_component(live.get_component()), read_only=False)
+
+    def merge_contributions_after(self, mod_handler):
+        """
+        Once the last contributor of a representation has run, let the
+        representation arbitrate between the contributions and write the
+        outcome into the live value.
+        """
+        for rep_name, last in self.last_contributor.items():
+            if last is not mod_handler:
+                continue
+            contributions = {handler.get_name(): view._representation
+                for handler, view in self.scratch_views[rep_name].items()}
+            rep_handler = self.blackboard.get(rep_name)
+            with rep_handler.get_data_lock():
+                rep_handler.call_merge(contributions)
 
     def module_wants_to_run(self, mod_handler):
         """
