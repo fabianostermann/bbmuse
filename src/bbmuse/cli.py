@@ -55,6 +55,7 @@ def start_editor(args):
         import bbmuse.editor
     except Exception:
         logger.error("GUI is not implemented yet.")
+        sys.exit(1)
 
 def process_args():
     parser = argparse.ArgumentParser(prog="bbmuse", description="BlackBoard MUSic Engine")
