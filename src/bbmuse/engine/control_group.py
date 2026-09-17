@@ -6,7 +6,7 @@ from time import monotonic, sleep, time
 
 import threading
 
-from bbmuse.engine.snapshot import snapshot_component
+from bbmuse.engine.snapshot import diff_snapshots, snapshot_component
 
 base_logger = logging.getLogger(__name__)
 
@@ -102,8 +102,10 @@ class ControlGroup:
                             with ExitStack() as locks:
                                 for data_lock in self.data_locks[mod_handler]:
                                     locks.enter_context(data_lock)
+                                before = self.snapshot_read_only(mod_handler)
                                 mod_handler.call_update(self.blackboard_views[mod_handler])
-                                
+                                self.check_read_only_untouched(mod_handler, before)
+
                         if self.run_mode < 0: # DEBUG mode
                             try:
                                 for rep_name in mod_handler.get_provides():
@@ -111,7 +113,6 @@ class ControlGroup:
                             except Exception:
                                 self.logger.exception(f"Representation {rep_name} did not pass validation check.")
                                 self.halt()
-                            # TODO in DEBUG mode: additional validation by pickling that read-only (required and used) representations are not altered
 
                     except Exception:
                         # Stop in dev mode (normal), ignore in release mode (perform).
@@ -149,6 +150,34 @@ class ControlGroup:
         delay = min(waits)
         if delay > 0:
             sleep(delay)
+
+    def snapshot_read_only(self, mod_handler):
+        """
+        DEBUG mode only: capture the representations this module may read but
+        not write, so that writing through them can be detected afterwards.
+
+        A read-only view blocks rebinding an attribute, but reading one hands
+        back the object itself, so a module can still mutate a list, a dict or
+        an array it only declared in REQUIRES. That cannot be prevented without
+        copying every read; it can be caught, which is what this does.
+        """
+        if self.run_mode >= 0:
+            return None
+        return {name: snapshot_component(self.blackboard.get(name).get_component())
+            for name in set(mod_handler.get_requires()) | set(mod_handler.get_uses())}
+
+    def check_read_only_untouched(self, mod_handler, before):
+        if not before:
+            return
+        for rep_name, old in before.items():
+            changed = diff_snapshots(old,
+                snapshot_component(self.blackboard.get(rep_name).get_component()))
+            if changed:
+                self.logger.error(
+                    "Module %s wrote to %s, which it only declared as read-only: %s. "
+                    "Move %s to PROVIDES, or stop mutating it.",
+                    mod_handler, rep_name, ", ".join(changed), rep_name)
+                self.halt()
 
     def take_delayed_snapshots(self):
         if not self.delayed_names:
