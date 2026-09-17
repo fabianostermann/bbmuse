@@ -6,6 +6,8 @@ from time import time
 
 import threading
 
+from bbmuse.engine.snapshot import snapshot_component
+
 base_logger = logging.getLogger(__name__)
 
 class ControlGroup:
@@ -32,6 +34,10 @@ class ControlGroup:
         # resolved once, so the hot path only acquires ready-made locks
         self.data_locks = {handler: self.blackboard.data_locks_for(handler)
             for handler in self.module_handlers}
+        # every representation any member of this group reads with a one-cycle delay
+        self.delayed_names = sorted({name
+            for handler in self.module_handlers
+            for name in handler.get_delayed()})
 
     def build_blackboard_views(self):
         bb_views = {}
@@ -61,7 +67,12 @@ class ControlGroup:
         self.logger.info("Start running..")
         while self._running:
             start_time = time()
-            
+
+            # one snapshot per cycle, shared by every module in the group, so a
+            # DELAYED read is the same value for all of them and cannot move
+            # while the cycle runs
+            self.take_delayed_snapshots()
+
             try:
                 for mod_handler in self.execution_order:
                     #self.logger.debug("Call _update() on module %s", mod_handler)
@@ -103,6 +114,17 @@ class ControlGroup:
             cycle_count += 1
 
             #self.logger.debug(f"End of cycle {cycle_count}, delta={delta_time:.5f}")
+
+    def take_delayed_snapshots(self):
+        if not self.delayed_names:
+            return
+        snapshots = {}
+        for rep_name in self.delayed_names:
+            rep_handler = self.blackboard.get(rep_name)
+            with rep_handler.get_data_lock():
+                snapshots[rep_name] = snapshot_component(rep_handler.get_component())
+        for bb_view in self.blackboard_views.values():
+            bb_view._set_delayed_snapshots(snapshots)
 
     def halt(self):
         self._running = False

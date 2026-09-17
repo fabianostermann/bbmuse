@@ -85,6 +85,15 @@ class Controller:
                     raise RuntimeError(f"Duplicate provide: Representation {repr} provided by modules {handler} and {provides_map[repr]}.")
         logger.debug("Map repr -> provider: %s", provides_map)
 
+        # DELAYED names must exist; unlike REQUIRES they add no ordering edge,
+        # which is the whole point of declaring them that way
+        for handler in self.module_handlers:
+            for repr in handler.get_delayed():
+                if not repr in self.blackboard._board.keys():
+                    raise RuntimeError(
+                        f"Module {handler} declares {repr} in DELAYED, but no such "
+                        f"representation is on the blackboard.")
+
         # Build the graph: edges from providers -> consumers
         graph = defaultdict(list)
         num_of_consumers = {m: 0 for m in self.module_handlers}

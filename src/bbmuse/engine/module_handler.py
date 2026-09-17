@@ -24,7 +24,7 @@ class ModuleHandler(BaseHandler):
 
         # check for required attributes
         for attr_name, expected_type in (("PROVIDES", list), ("REQUIRES", list),
-                ("USES", list), ("GROUP", str)):
+                ("USES", list), ("DELAYED", list), ("GROUP", str)):
             if not hasattr(module, attr_name):
                 continue # optional: the getters below supply a default
             value = getattr(module, attr_name)
@@ -96,6 +96,10 @@ class ModuleHandler(BaseHandler):
 
     def get_uses(self):
         return getattr(self.get_component(), "USES", [])
+
+    def get_delayed(self):
+        """ Representations this module reads as of the previous cycle. """
+        return getattr(self.get_component(), "DELAYED", [])
         
     def get_group(self):
         return getattr(self.get_component(), "GROUP", "default")
