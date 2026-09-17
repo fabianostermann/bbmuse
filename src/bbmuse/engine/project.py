@@ -151,8 +151,10 @@ class BbMuseProject():
         blackboard = Blackboard(self.representation_handlers, transport=transport)
 
         # build controller
+        blackboard_config = self.config["blackboard"]
         self.controller = Controller(self.module_handlers, blackboard,
-            failed_representation_names=getattr(self, "failed_representation_names", ()))
+            failed_representation_names=getattr(self, "failed_representation_names", ()),
+            levels=blackboard_config["levels"], focus=blackboard_config["focus"])
         self.controller.build(strict=strict)
 
     def run(self, *args, **kwargs):

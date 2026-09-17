@@ -159,6 +159,10 @@ class ModuleHandler(BaseHandler):
     def is_active(self):
         return getattr(self.get_component(), "ACTIVE", True)
 
+    def get_declared_level(self):
+        """ An explicit LEVEL on the module, overriding what it provides. """
+        return getattr(self.get_component(), "LEVEL", None)
+
     def get_priority(self):
         """
         Which of several ready modules goes first. Higher runs earlier.

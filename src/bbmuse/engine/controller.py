@@ -15,10 +15,15 @@ logger = logging.getLogger(__name__)
 
 class Controller:
 
-    def __init__(self, module_handlers, blackboard: Blackboard, failed_representation_names=()):
+    def __init__(self, module_handlers, blackboard: Blackboard, failed_representation_names=(),
+            levels=(), focus="bottom-up"):
         self.module_handlers = module_handlers
         self.blackboard = blackboard
         self.failed_representation_names = list(failed_representation_names)
+        self.levels = list(levels)
+        if focus not in ("bottom-up", "top-down"):
+            raise ValueError(f"focus must be 'bottom-up' or 'top-down', got {focus!r}")
+        self.focus = focus
         self.contributors = {}      # repr -> [modules], only for merged representations
         self.last_contributor = {}  # repr -> the contributor that triggers the merge
 
@@ -36,14 +41,79 @@ class Controller:
 
     def build(self, strict=False):
          # test if dependency graph is is complete
+        self.resolve_levels()
         self.build_execution_order()
         self.report_deprecated_uses()
         self.report_cross_group_requires(strict=strict)
 
+    def resolve_levels(self):
+        """
+        Work out which abstraction level each module operates at.
+
+        A module's level is the highest level it writes to, since that is what
+        it is producing. An explicit LEVEL on the module overrides that, for a
+        module that writes low but reasons high.
+        """
+        self.module_levels = {}
+        if not self.levels:
+            return
+
+        order = {name: index for index, name in enumerate(self.levels)}
+        for handler in self.module_handlers:
+            declared = handler.get_declared_level()
+            if declared is not None:
+                if declared not in order:
+                    raise RuntimeError(
+                        f"Module {handler} declares LEVEL {declared!r}, which is not in "
+                        f"the project's levels {self.levels}.")
+                self.module_levels[handler] = order[declared]
+                continue
+
+            written = []
+            for rep_name in handler.get_provides():
+                level = self.blackboard.get(rep_name).get_level()
+                if level is None:
+                    continue
+                if level not in order:
+                    raise RuntimeError(
+                        f"Representation {rep_name} declares LEVEL {level!r}, which is "
+                        f"not in the project's levels {self.levels}.")
+                written.append(order[level])
+            if written:
+                self.module_levels[handler] = max(written)
+                if len(set(written)) > 1:
+                    spanned = sorted({self.levels[i] for i in written})
+                    logger.warning(
+                        "Module %s writes across levels %s. A knowledge source usually "
+                        "produces one level; consider splitting it.", handler, spanned)
+
+        for handler in self.module_handlers:
+            if handler not in self.module_levels:
+                logger.debug("No level for %s; it is scheduled as if at the bottom.", handler)
+
+        described = ", ".join(f"{handler.get_name()}={self.levels[i]}"
+            for handler, i in sorted(self.module_levels.items(), key=lambda kv: kv[1]))
+        logger.info("Blackboard levels %s, focus %s. Module levels: %s",
+            self.levels, self.focus, described or "none declared")
+
     def effective_priority(self, handler):
-        """ A module's declared PRIORITY, or 0 when it has none. """
+        """
+        What decides between modules that are ready at the same time.
+
+        An explicit PRIORITY always wins. Otherwise the module's abstraction
+        level decides, which is the blackboard's focus of attention: bottom-up
+        runs the lower levels first, so evidence is aggregated before anything
+        reasons about it, and top-down runs the higher levels first, so
+        predictions are in place before the detail is filled in.
+        """
         declared = handler.get_priority()
-        return 0 if declared is None else declared
+        if declared is not None:
+            return declared
+        level = getattr(self, "module_levels", {}).get(handler)
+        if level is None:
+            return 0
+        # lower level index should run earlier when bottom-up, so negate it
+        return -level if self.focus == "bottom-up" else level
 
     def report_deprecated_uses(self):
         """

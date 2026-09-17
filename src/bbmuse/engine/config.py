@@ -19,6 +19,10 @@ class Config(dict):
                     "modules": [ "modules/" ],
                     "representations": [ "representations/" ],
                 },
+                "blackboard": {
+                    "levels": [],          # e.g. ["signal", "note", "phrase", "form"]
+                    "focus": "bottom-up",  # or "top-down"
+                },
                 "transport": {
                     "tempo": 120.0,
                     "ppq": 960,

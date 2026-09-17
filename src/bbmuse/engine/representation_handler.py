@@ -59,6 +59,16 @@ class RepresentationHandler(BaseHandler):
     #def __str__(self):
     #    return f"<Repr:{self.get_name()}>"
 
+    def get_level(self):
+        """
+        The abstraction level this representation sits at, or None.
+
+        Levels are what make a blackboard hierarchical: raw material at the
+        bottom, structure above it, and knowledge sources working between
+        adjacent levels in both directions.
+        """
+        return getattr(self.get_component(), "LEVEL", None)
+
     def has_merge(self):
         """ Whether this representation can arbitrate between several contributors. """
         return callable(getattr(self.get_component(), "_merge", None))
