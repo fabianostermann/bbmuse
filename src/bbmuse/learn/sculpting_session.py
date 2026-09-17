@@ -259,8 +259,10 @@ class SculptingSession:
 
         # Average across all rewards into a single signal
         stacked_rewards = torch.stack([trajectories[k] for k in reward_keys], dim=0)
-        # Normalize each reward signal over the episode length before combining
-        stacked_rewards = (stacked_rewards - stacked_rewards.mean(dim=1, keepdim=True)) / (stacked_rewards.std(dim=1, keepdim=True) + 1e-8)
+        # Normalize each reward signal over the episode length before combining.
+        # correction=0 (population std): the sample std of a single-step rollout
+        # is NaN, which would poison every gradient that follows.
+        stacked_rewards = (stacked_rewards - stacked_rewards.mean(dim=1, keepdim=True)) / (stacked_rewards.std(dim=1, correction=0, keepdim=True) + 1e-8)
         combined_rewards = stacked_rewards.mean(dim=0)  # shape: (T,)
 
         # Compute discounted returns
@@ -272,6 +274,6 @@ class SculptingSession:
             returns[t] = G
 
         # Normalize
-        returns = (returns - returns.mean()) / (returns.std() + 1e-8) # normalize
+        returns = (returns - returns.mean()) / (returns.std(correction=0) + 1e-8) # normalize
 
         return returns, named_returns
