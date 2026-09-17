@@ -68,7 +68,12 @@ class ApplyRestoreSession:
             return
 
         # backup original file content
-        content = '\n'.join(f"#bblearn---backup#{line}" for line in content.splitlines())
+        backup_lines = content.splitlines()
+        if content.endswith("\n"):
+            # splitlines() drops the final terminator; an extra empty line
+            # records that it was there, so restore can put it back exactly
+            backup_lines.append("")
+        content = '\n'.join(f"#bblearn---backup#{line}" for line in backup_lines)
         
         # add warning how to use the modified file
         content = USER_WARNING_STUB.replace(
@@ -98,7 +103,7 @@ class ApplyRestoreSession:
             logger.error("Writing aborted. Did not find any bblearn-backup tag in file: %s", module_path)
             return
 
-        content = '\n'.join(f"{line.replace("#bblearn---backup#", "")}"
+        content = '\n'.join(line.removeprefix("#bblearn---backup#")
             for line in content.splitlines()
             if line.startswith("#bblearn---backup#"))
         self.write_to_module_file(module_path, content)
