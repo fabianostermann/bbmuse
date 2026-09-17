@@ -82,6 +82,15 @@ class ApplyRestoreSession:
         content += BBMUSE_NATIVE_MODULE_STUB
         content = content.replace("###<bblearn---checkpoint_path>###", f"\"{checkpoint_path}\"")
         content = content.replace("###<bblearn---torch.device>###", f"\"{device}\"")
+
+        # carry over the blackboard contract of the module that is being replaced,
+        # so the generated module declares the same dependencies as the original
+        mh = self.module_handler
+        content = content.replace("###<bblearn---group>###", repr(mh.get_group()))
+        content = content.replace("###<bblearn---uses>###", repr(list(mh.get_uses())))
+        content = content.replace("###<bblearn---requires>###", repr(list(mh.get_requires())))
+        content = content.replace("###<bblearn---provides>###", repr(list(mh.get_provides())))
+
         self.write_to_module_file(module_path, content)
 
     def write_restore(self, module_path):
@@ -154,9 +163,11 @@ import torch
 from bbmuse.learn.checkpoint import Checkpoint
 
 # --- this module's blackboard contract ---------------------------------------
-USES     = [ "UsedRep" ]
-REQUIRES = [ "ReqRep" ]
-PROVIDES = [ "ProvRep", "UsedRep" ]
+# taken from the original module file at apply time
+GROUP    = ###<bblearn---group>###
+USES     = ###<bblearn---uses>###
+REQUIRES = ###<bblearn---requires>###
+PROVIDES = ###<bblearn---provides>###
 # ------------------------------------------------------------------------------
 
 # --- checkpoint location + inference device ------------------------
