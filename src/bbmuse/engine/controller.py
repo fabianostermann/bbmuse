@@ -122,25 +122,31 @@ class Controller:
                 logger.warning("KeyboardInterrupt detected: request halt and join..")
                 self.halt()
         finally:
+            # shut down from here on no matter how the loop was left, so that
+            # modules are always closed and the gc is always turned back on
             for group in self.groups:
                 group.halt()
             logger.debug(f"Requested halt after %.3f secs..", time() - start_time)
 
-        for group in self.groups:
-            group.halt_and_join()
-            logger.debug("Group '%s' accepted join with main thread.", group.name)
+            for group in self.groups:
+                group.halt_and_join()
+                logger.debug("Group '%s' accepted join with main thread.", group.name)
 
-        logger.info("All groups joined with main thread.")
+            logger.info("All groups joined with main thread.")
 
-        logger.info("Call _close() on all modules..")
-        for mod_handler in self.module_handlers:
-            mod_handler.call_close()
-        
-        # if garbage collector has been disabled
-        gc.enable()
+            logger.info("Call _close() on all modules..")
+            for mod_handler in self.module_handlers:
+                try:
+                    mod_handler.call_close()
+                except Exception:
+                    logger.exception("Error while closing module %s.", mod_handler)
 
-        for mod_handler in self.module_handlers:
-            mod_handler.print_timing_stats()
+            # if garbage collector has been disabled
+            if run_mode > 0:
+                gc.enable()
+
+            for mod_handler in self.module_handlers:
+                mod_handler.print_timing_stats()
 
     def halt(self):
         self._running = False
