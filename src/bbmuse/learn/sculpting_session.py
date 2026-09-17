@@ -42,6 +42,10 @@ class SculptingSession:
 
         # load clone from disk -- TODO: create mode that runs without BC model (init just a random model)
         clone_dirs = self.module_manager.get_available_clone_run_dirs(self.module_handler)
+        if not clone_dirs:
+            logger.error("No clones found for module %s. Run 'bblearn clone' first.",
+                self.module_handler.get_name())
+            sys.exit(1)
         clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
         self.loaded_checkpoint = Checkpoint(clone_final_path, self.device).load()
         clone_model = self.loaded_checkpoint.make_model()

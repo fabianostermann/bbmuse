@@ -39,6 +39,10 @@ class CloningSession:
 
         # load packed representations from recorded episodes
         ep_paths = self.module_manager.get_available_episode_paths(self.module_handler)
+        if not ep_paths:
+            logger.error("No records found for module %s. Run 'bblearn listen' first.",
+                self.module_handler.get_name())
+            sys.exit(1)
         ep_path = ep_paths[-1] # TODO: load all episodes, just loading last episode for now
         self.episode = self.load_episode(ep_path)
 
