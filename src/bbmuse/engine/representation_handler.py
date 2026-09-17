@@ -34,14 +34,17 @@ class RepresentationHandler(BaseHandler):
         old_component = self.get_component()
         try:
             self.build() 
+            reloaded = True
         except Exception:
             logger.exception("Error when building representation %s. Keeping former instance.", self)
             self._component = old_component
-            
+            reloaded = False
+
         for rep_view in self.representation_views:
             rep_view._rebind(self._component)
-            
-        logger.info("Hot-reload on %s was successful.", self)
+
+        if reloaded:
+            logger.info("Hot-reload on %s was successful.", self)
 
     #def __str__(self):
     #    return f"<Repr:{self.get_name()}>"

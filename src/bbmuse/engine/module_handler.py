@@ -57,7 +57,8 @@ class ModuleHandler(BaseHandler):
         except Exception:
             logger.exception("Error when building module %s. Keeping former instance.", self)
             self._component = old_component
-        logger.info("Hot-reload on %s was successful.", self)
+        else:
+            logger.info("Hot-reload on %s was successful.", self)
     
     #def __str__(self):
     #    return f"<Module:{self.get_name()}>"
