@@ -111,9 +111,9 @@ class SculptingSession:
         epoch_loss = 0.0
         with tqdm(range(num_updates+1)) as pbar:
             start_walltime = time()
-            for num_updates in pbar:
+            for update in pbar:
 
-                if num_updates > 0:
+                if update > 0:
                     logger.debug("Start collecting trajectories (exploration phase)..")
 
                     # collect trajectories with current policy
@@ -201,7 +201,7 @@ class SculptingSession:
                             epoch_loss += batch_loss / len(indices)
 
                     session_logger.log({
-                        "num_updates": num_updates,
+                        "num_updates": update,
                         "weighted_loss": epoch_loss,
                         "policy_loss": sum(epoch_policy_loss)/len(epoch_policy_loss),
                         "entropy": sum(epoch_entropy)/len(epoch_entropy),
@@ -209,22 +209,22 @@ class SculptingSession:
                         "walltime": time()-start_walltime,
                     }).step()
 
-                    desc = f"num_updates={num_updates:04d} loss={epoch_loss:.6f}"
+                    desc = f"num_updates={update:04d} loss={epoch_loss:.6f}"
                     pbar.set_description(desc)
 
                 # save intermediate policy checkpoints
                 if not self.dry_run:
-                    if checkpoint_interval and num_updates % checkpoint_interval == 0:
-                        ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
+                    if checkpoint_interval and update % checkpoint_interval == 0:
+                        ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, update)
                         ckpt = Checkpoint(ckpt_path)
-                        ckpt.save(self.policy_model.model, num_updates, epoch_loss, optimizer)
+                        ckpt.save(self.policy_model.model, update, epoch_loss, optimizer)
                     session_logger.write_to_disk()
 
         # save final policy
         if not self.dry_run:
             final_path = self.module_manager.get_final_model_path(curr_run_dir)
             pt = Checkpoint(final_path)
-            pt.save(self.policy_model.model, num_updates, epoch_loss, optimizer)
+            pt.save(self.policy_model.model, update, epoch_loss, optimizer)
             session_logger.write_to_disk()
         
     def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber):
