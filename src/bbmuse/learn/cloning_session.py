@@ -51,6 +51,8 @@ class CloningSession:
             f"Requires in module handler and loaded episode does not match, got: {self.module_handler.get_requires()} and {list(self.episode["requires"].keys())}"
         assert self.module_handler.get_uses() == list(self.episode["uses"].keys()),\
             f"Uses in module handler and loaded episode does not match, got: {self.module_handler.get_uses()} and {list(self.episode["uses"].keys())}"
+        assert self.module_handler.get_delayed() == list(self.episode["delayed"].keys()),\
+            f"Delayed in module handler and loaded episode does not match, got: {self.module_handler.get_delayed()} and {list(self.episode["delayed"].keys())}"
         assert self.module_handler.get_provides() == list(self.episode["provides"].keys()),\
             f"Provides in module handler and loaded episode does not match, got: {self.module_handler.get_provides()} and {list(self.episode["provides"].keys())}"
 
@@ -67,7 +69,8 @@ class CloningSession:
         }) == 1, "Inconsistent timestep counts across episode arrays"
 
         # init network that will be used for behavior cloning
-        input_dims_dict = {k: v[1:] for k, v in (shapes["uses"] | shapes["requires"]).items()}
+        input_dims_dict = {k: v[1:] for k, v
+            in (shapes["uses"] | shapes["delayed"] | shapes["requires"]).items()}
         output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
         path_to_backbone = self.get_path_to_backbone(args.backbone)
         self.clone_model = ModuleClone(input_dims_dict, output_dims_dict, path_to_backbone)
@@ -76,17 +79,15 @@ class CloningSession:
         episode = {
             "requires": {},
             "uses": {},
+            "delayed": {},
             "provides": {},
         }
 
         with np.load(ep_path) as data:
             for key in data.files:
-                if key.startswith("requires__"):
-                    episode["requires"][key[len("requires__"):]] = data[key]
-                elif key.startswith("uses__"):
-                    episode["uses"][key[len("uses__"):]] = data[key]
-                elif key.startswith("provides__"):
-                    episode["provides"][key[len("provides__"):]] = data[key]
+                group, _, rep_name = key.partition("__")
+                if group in episode:
+                    episode[group][rep_name] = data[key]
                 else:
                     raise ValueError(f"Unexpected key in episode archive: {key}")
 
@@ -139,7 +140,7 @@ class CloningSession:
         self.clone_model.train()
         optimizer = torch.optim.Adam(self.clone_model.parameters(), lr=lr)
 
-        input_arrays = self.episode["uses"] | self.episode["requires"]
+        input_arrays = self.episode["uses"] | self.episode["delayed"] | self.episode["requires"]
         target_arrays = self.episode["provides"]
 
         inputs = {

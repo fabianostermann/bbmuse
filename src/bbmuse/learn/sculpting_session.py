@@ -131,7 +131,9 @@ class SculptingSession:
                     session_logger.log(mean_returns)
 
                     # extract what we need once, outside the loop
-                    states = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('requires__') or k.startswith('uses__')}
+                    states = {k.split('__')[1]: v for k, v in trajectories.items()
+                        if k.startswith('requires__') or k.startswith('uses__')
+                        or k.startswith('delayed__')}
                     old_log_probs = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('log_probs__')}
                     actions = {k.split('__')[1]: v for k, v in trajectories.items() if k.startswith('actions__')}
                     

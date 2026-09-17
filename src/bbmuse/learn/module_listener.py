@@ -18,12 +18,14 @@ class ModuleListener:
         self._expected_shapes = {} # rep_name -> list of shapes
         self._requires_buffer = {}  # rep_name -> list of arrays
         self._uses_buffer = {}  # rep_name -> list of arrays
+        self._delayed_buffer = {}  # rep_name -> list of arrays
         self._provides_buffer = {}  # rep_name -> list of arrays
 
     def _check_requirements(self):
         # check for required methods
         for rep_name in (self._mod_handler.get_requires()
                 + self._mod_handler.get_uses()
+                + self._mod_handler.get_delayed()
                 + self._mod_handler.get_provides()):
             rh = self._blackboard.get(rep_name)
             assert self._check_function_exists(rh, "_pack"), \
@@ -80,6 +82,12 @@ class ModuleListener:
         for used_rep_name in self._mod_handler.get_uses():
             rh = self._blackboard.get(used_rep_name)
             self._store(rh, self._uses_buffer)
+        # DELAYED reads come from the cycle's snapshot, not the live
+        # representation, so record exactly what the module saw
+        for delayed_rep_name in self._mod_handler.get_delayed():
+            self._store_value(delayed_rep_name,
+                self._perform_pack_on(delayed_rep_name, getattr(self.bb_view.prev, delayed_rep_name)),
+                self._delayed_buffer)
 
     def _after_hook(self):
         logger.debug("Running _after_hook() on module %s", self._mod_handler)
@@ -88,31 +96,34 @@ class ModuleListener:
             self._store(rh, self._provides_buffer)
 
     def _store(self, rep_handler, buffer):
-        rep_array = self._perform_pack(rep_handler)
         rep_name = rep_handler.get_name()
+        self._store_value(rep_name,
+            self._perform_pack_on(rep_name, rep_handler.get_component()), buffer)
+
+    def _store_value(self, rep_name, rep_array, buffer):
         if rep_name not in buffer:
             buffer[rep_name] = []
         buffer[rep_name].append(rep_array)
 
-    def _perform_pack(self, rep_handler):
-        rep_array = rep_handler.get_component()._pack()
+    def _perform_pack_on(self, rep_name, component):
+        rep_array = component._pack()
         assert isinstance(rep_array, np.ndarray), \
-            f"_pack() in {rep_handler} must return a numpy array"
-        
-        rep_name = rep_handler.get_name()
+            f"_pack() in {rep_name} must return a numpy array"
+
         if rep_name not in self._expected_shapes:
             self._expected_shapes[rep_name] = rep_array.shape  # first call, store it
         else:
             assert rep_array.shape == self._expected_shapes[rep_name], \
-                f"_pack() in {rep_handler} returned shape {rep_array.shape}, " \
+                f"_pack() in {rep_name} returned shape {rep_array.shape}, " \
                 f"expected {self._expected_shapes[rep_name]}"
-        
+
         return rep_array
 
     def flush(self):
         rep_arrays = {}
         rep_arrays |= {f"requires__{k}": np.stack(v) for k, v in self._requires_buffer.items()}
         rep_arrays |= {f"uses__{k}": np.stack(v) for k, v in self._uses_buffer.items()}
+        rep_arrays |= {f"delayed__{k}": np.stack(v) for k, v in self._delayed_buffer.items()}
         rep_arrays |= {f"provides__{k}": np.stack(v) for k, v in self._provides_buffer.items()}
         # shape per rep: (n_timesteps, *rep_shape)
 
@@ -131,6 +142,7 @@ class ModuleListener:
 
         self._requires_buffer.clear()
         self._uses_buffer.clear()
+        self._delayed_buffer.clear()
         self._provides_buffer.clear()
         return rep_arrays
 

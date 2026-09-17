@@ -41,7 +41,8 @@ class PolicyProber(ModuleListener):
         # get last requires and uses from buffer
         last_required = {rep_name: torch.as_tensor(rep_array[-1], dtype=torch.float32, device=self.device) for rep_name, rep_array in self._requires_buffer.items()}
         last_used = {rep_name: torch.as_tensor(rep_array[-1], dtype=torch.float32, device=self.device) for rep_name, rep_array in self._uses_buffer.items()}
-        last_inputs = last_required | last_used
+        last_delayed = {rep_name: torch.as_tensor(rep_array[-1], dtype=torch.float32, device=self.device) for rep_name, rep_array in self._delayed_buffer.items()}
+        last_inputs = last_required | last_used | last_delayed
 
         # let policy model predict actions
         with torch.no_grad():
