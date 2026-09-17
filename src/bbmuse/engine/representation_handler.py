@@ -16,7 +16,9 @@ class RepresentationHandler(BaseHandler):
 
     def build(self):
         rep = self.dynamic_import_from_file(self.get_file_location())
-        self.call_validate()
+        # validate the freshly imported module before publishing it, so that a
+        # representation that fails its own check never reaches the blackboard
+        self._call_validate_on(rep)
         self.set_component(rep) # also sets build_status to True
 
         # overwrite default print
@@ -45,8 +47,11 @@ class RepresentationHandler(BaseHandler):
     #    return f"<Repr:{self.get_name()}>"
 
     def call_validate(self):
-        if callable(getattr(self.get_component(), "_validate", None)):
-            self.get_component()._validate()
+        self._call_validate_on(self.get_component())
+
+    def _call_validate_on(self, component):
+        if callable(getattr(component, "_validate", None)):
+            component._validate()
             
     def create_view(self, read_only=False):
         rep_view = _RepresentationView(self.get_component(), read_only=read_only)
