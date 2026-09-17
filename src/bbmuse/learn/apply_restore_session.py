@@ -221,7 +221,7 @@ def _update(bb):
             getattr(bb, name)._unpack(outputs[name].squeeze(0))
 
 
-def close():
+def _close():
     global _checkpoint, _model
     print("Releasing clone model.")
     _model = None
