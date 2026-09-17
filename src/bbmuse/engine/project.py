@@ -26,10 +26,10 @@ class BbMuseProject():
         
         os.chdir(self.config.get_project_dir())
 
-    def build_all(self):
+    def build_all(self, strict=False):
         self.prepare_handlers()
         self.build_handlers()
-        self.build_controller()
+        self.build_controller(strict=strict)
     
     def prepare_handlers(self):
         # Search for module defintion files
@@ -104,14 +104,14 @@ class BbMuseProject():
         # "defined but failed to import" when a dependency turns up missing
         self.failed_representation_names = failed_reps
 
-    def build_controller(self):
+    def build_controller(self, strict=False):
         # create blackboard
         blackboard = Blackboard(self.representation_handlers)
 
         # build controller
         self.controller = Controller(self.module_handlers, blackboard,
             failed_representation_names=getattr(self, "failed_representation_names", ()))
-        self.controller.build()
+        self.controller.build(strict=strict)
 
     def run(self, *args, **kwargs):
         self.controller.run(*args, **kwargs)

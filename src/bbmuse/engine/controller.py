@@ -29,12 +29,46 @@ class Controller:
             groups.append(ControlGroup(handlers, self.blackboard))
         return groups
 
-    def build(self):
+    def build(self, strict=False):
          # test if dependency graph is is complete
         self.build_execution_order()
+        self.report_cross_group_requires(strict=strict)
 
         for group in self.groups:
             group.build(self.execution_order)
+
+    def report_cross_group_requires(self, strict=False):
+        """
+        A REQUIRES edge only orders two modules when they run in the same
+        control group. Groups are separate threads, so an edge that crosses a
+        group boundary gives no ordering and no one-to-one pairing at all: the
+        consumer sees whichever value happens to be there, and may see the same
+        one many times or miss most of them. Nothing about the declaration says
+        so, hence this report.
+        """
+        crossing = []
+        for provider, consumers in self.dependencies.items():
+            for consumer in consumers:
+                if provider.get_group() != consumer.get_group():
+                    shared = sorted(set(provider.get_provides()) & set(consumer.get_requires()))
+                    crossing.append((provider, consumer, shared))
+
+        if not crossing:
+            return
+
+        for provider, consumer, shared in crossing:
+            logger.warning(
+                "%s requires %s from %s, but they are in different control groups "
+                "('%s' and '%s'). The dependency is NOT ordered across groups: put both "
+                "modules in one group for lockstep updates, or declare it in DELAYED to "
+                "read the previous cycle deterministically.",
+                consumer, ", ".join(shared), provider,
+                consumer.get_group(), provider.get_group())
+
+        if strict:
+            raise RuntimeError(
+                f"{len(crossing)} REQUIRES dependencies cross a control group boundary "
+                "and are therefore unordered. Listed above; refused in DEBUG mode.")
 
     def build_execution_order(self):
         # construct mapping: repr -> provider
