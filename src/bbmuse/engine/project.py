@@ -84,6 +84,7 @@ class BbMuseProject():
         logger.debug("List of all provided and required representations: %s", all_provides_and_requires)
 
         rep_handlers = []
+        failed_reps = []
         for handler in self.potential_representation_handlers:
             if handler.get_name() in all_provides_and_requires:
                 try:
@@ -91,18 +92,23 @@ class BbMuseProject():
                     rep_handlers.append(handler)
                 except Exception:
                     logger.exception("Build failed for representation %s. Skip and ignore.", handler)
+                    failed_reps.append(handler.get_name())
             else:
                 logger.warning("%s not found in provided or required representations. Skip import.", handler.get_name())
 
         assert rep_handlers, "No representations were successfully build."
         self.representation_handlers = rep_handlers
+        # remembered so the controller can tell "never defined" apart from
+        # "defined but failed to import" when a dependency turns up missing
+        self.failed_representation_names = failed_reps
 
     def build_controller(self):
         # create blackboard
         blackboard = Blackboard(self.representation_handlers)
 
         # build controller
-        self.controller = Controller(self.module_handlers, blackboard)
+        self.controller = Controller(self.module_handlers, blackboard,
+            failed_representation_names=getattr(self, "failed_representation_names", ()))
         self.controller.build()
 
     def run(self, *args, **kwargs):

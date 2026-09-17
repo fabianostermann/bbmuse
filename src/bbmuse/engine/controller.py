@@ -12,9 +12,10 @@ logger = logging.getLogger(__name__)
 
 class Controller:
 
-    def __init__(self, module_handlers, blackboard: Blackboard):
+    def __init__(self, module_handlers, blackboard: Blackboard, failed_representation_names=()):
         self.module_handlers = module_handlers
         self.blackboard = blackboard
+        self.failed_representation_names = list(failed_representation_names)
 
         self.groups = self.make_groups()
         
@@ -41,7 +42,9 @@ class Controller:
         for handler in self.module_handlers:
             for repr in handler.get_provides():
                 if not repr in self.blackboard._board.keys():
-                    raise RuntimeError(f"Representation {repr} is unknown to the blackboard, thus cannot be provided by module {handler}.")
+                    if repr in self.failed_representation_names:
+                        raise RuntimeError(f"Representation {repr}, provided by module {handler}, failed to build. See the logged traceback above for the cause.")
+                    raise RuntimeError(f"Representation {repr} is unknown to the blackboard, thus cannot be provided by module {handler}. No definition file for it was found.")
                 if not repr in provides_map.keys():
                     provides_map[repr] = handler
                 else:
