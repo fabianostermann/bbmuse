@@ -1,7 +1,8 @@
 from time import time
 
-USES = [ "RepB" ]
-REQUIRES = [ "RepA" ]
+# RepA comes from another control group and RepB would close a cycle through
+# ModB, so both are read as of the previous cycle
+DELAYED = [ "RepA", "RepB" ]
 PROVIDES = [ "Clock" ]
 
 def _update(bb):

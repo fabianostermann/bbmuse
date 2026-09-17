@@ -1,6 +1,6 @@
 GROUP = "special"
 REQUIRES = [ "RepConfig" ]
-USES = [ "Clock" ]
+DELAYED = [ "Clock" ]   # provided by Timer in the 'default' group
 PROVIDES = [ "RepA" ]
 
 import time

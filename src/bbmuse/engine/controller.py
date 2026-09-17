@@ -32,7 +32,24 @@ class Controller:
     def build(self, strict=False):
          # test if dependency graph is is complete
         self.build_execution_order()
+        self.report_deprecated_uses()
         self.report_cross_group_requires(strict=strict)
+
+    def report_deprecated_uses(self):
+        """
+        USES is superseded by DELAYED. Both read without creating an ordering
+        edge, but USES reads the live representation -- so what it returns
+        depends on the arbitrary tie-breaking of the topological sort and on
+        group membership -- while DELAYED reads a snapshot of the previous
+        cycle, which is the same for everyone and reproducible.
+        """
+        for handler in self.module_handlers:
+            if handler.get_uses():
+                logger.warning(
+                    "%s declares USES %s. USES is deprecated because what it reads is "
+                    "not well defined: move these to DELAYED to read the previous cycle "
+                    "reproducibly, or to REQUIRES to be ordered after the provider.",
+                    handler, ", ".join(handler.get_uses()))
 
         for group in self.groups:
             group.build(self.execution_order)

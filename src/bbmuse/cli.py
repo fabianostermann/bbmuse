@@ -31,7 +31,8 @@ def start_headless(args):
 
     logger.info("Build project..")
     try:
-        project.build_all()
+        # DEBUG mode refuses a project whose declared dependencies are unordered
+        project.build_all(strict=args.mode < 0)
     except Exception:
         logger.exception("Building project failed.")
         sys.exit(1)

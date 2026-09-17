@@ -1,5 +1,5 @@
 GROUP = "output-group"
-REQUIRES = [ "BibRep" ]
+DELAYED = [ "BibRep" ]  # constant, provided by Init in the 'default' group
 PROVIDES = [ "RepOut1", "RepOut2", ]    
 
 from time import sleep
