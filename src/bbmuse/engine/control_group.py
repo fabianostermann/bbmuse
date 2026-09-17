@@ -1,10 +1,10 @@
 import logging
 
 from collections import defaultdict, deque
+from contextlib import ExitStack
 from time import time
 
 import threading
-GLOBAL_UPDATE_LOCK = threading.Lock()
 
 base_logger = logging.getLogger(__name__)
 
@@ -29,6 +29,9 @@ class ControlGroup:
     def build(self, exec_order):
         self.execution_order = [handler for handler in exec_order if handler in self.module_handlers]
         self.build_blackboard_views()
+        # resolved once, so the hot path only acquires ready-made locks
+        self.data_locks = {handler: self.blackboard.data_locks_for(handler)
+            for handler in self.module_handlers}
 
     def build_blackboard_views(self):
         bb_views = {}
@@ -69,7 +72,9 @@ class ControlGroup:
                                 self.blackboard.get(rep_name).consider_hot_reload()
                     
                         if self._running and mod_handler.is_active():
-                            with GLOBAL_UPDATE_LOCK:
+                            with ExitStack() as locks:
+                                for data_lock in self.data_locks[mod_handler]:
+                                    locks.enter_context(data_lock)
                                 mod_handler.call_update(self.blackboard_views[mod_handler])
                                 
                         if self.run_mode < 0: # DEBUG mode

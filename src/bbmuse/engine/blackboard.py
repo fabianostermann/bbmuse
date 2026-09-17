@@ -41,6 +41,20 @@ class Blackboard:
         writable_keys = module_handler.get_provides()
         return _BlackboardView(self, readable_keys, writable_keys)
 
+    def data_locks_for(self, module_handler: ModuleHandler):
+        """
+        The data locks of every representation a module touches.
+
+        Sorted by representation name so that all groups acquire overlapping
+        locks in the same order and therefore cannot deadlock each other.
+        Modules whose representations do not overlap share no lock at all and
+        so genuinely run in parallel.
+        """
+        names = set(module_handler.get_requires()) \
+            | set(module_handler.get_uses()) \
+            | set(module_handler.get_provides())
+        return [self._board[name].get_data_lock() for name in sorted(names)]
+
 class _BlackboardView:
 
     def __init__(self, blackboard: Blackboard, readable_keys=None, writable_keys=None):

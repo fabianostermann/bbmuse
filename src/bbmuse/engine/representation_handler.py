@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import importlib.util
 import inspect
+import threading
 
 from bbmuse.engine.base_handler import BaseHandler
 
@@ -13,6 +14,12 @@ class RepresentationHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.representation_views = []
+        # guards this representation's data against concurrent access from
+        # control groups running in different threads
+        self._data_lock = threading.RLock()
+
+    def get_data_lock(self):
+        return self._data_lock
 
     def build(self):
         rep = self.dynamic_import_from_file(self.get_file_location())
@@ -32,16 +39,19 @@ class RepresentationHandler(BaseHandler):
     def hot_reload(self):
         logger.debug("Hot-reloading %s..", self)
         old_component = self.get_component()
-        try:
-            self.build() 
-            reloaded = True
-        except Exception:
-            logger.exception("Error when building representation %s. Keeping former instance.", self)
-            self._component = old_component
-            reloaded = False
+        # swap the component under the data lock, so no module can be reading
+        # or writing this representation while its views are rebound
+        with self._data_lock:
+            try:
+                self.build()
+                reloaded = True
+            except Exception:
+                logger.exception("Error when building representation %s. Keeping former instance.", self)
+                self._component = old_component
+                reloaded = False
 
-        for rep_view in self.representation_views:
-            rep_view._rebind(self._component)
+            for rep_view in self.representation_views:
+                rep_view._rebind(self._component)
 
         if reloaded:
             logger.info("Hot-reload on %s was successful.", self)
