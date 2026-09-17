@@ -17,6 +17,8 @@ class PolicyProber(ModuleListener):
     def __init__(self, policy_model: PolicyModel, mod_handler: ModuleHandler, blackboard: Blackboard, rewards: Reward):
         super().__init__(mod_handler, blackboard)
         self.rewards = rewards
+        # rewards judge the whole system, not just what this module declared
+        self.reward_view = blackboard.create_observer_view()
 
         self.policy_model = policy_model
         self.device = next(policy_model.parameters()).device
@@ -75,7 +77,7 @@ class PolicyProber(ModuleListener):
         # collect available rewards (self._check_function_exists(rh, "_reward"))
         for reward in self.rewards:
             name = reward.get_name()
-            reward_value = reward.call_reward(self.bb_view)
+            reward_value = reward.call_reward(self.reward_view)
             if name not in self._rewards_buffer:
                 self._rewards_buffer[name] = []
             self._rewards_buffer[name].append(reward_value)

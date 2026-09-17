@@ -42,6 +42,17 @@ class Blackboard:
         return _BlackboardView(self, readable_keys, writable_keys,
             delayed_keys=module_handler.get_delayed())
 
+    def create_observer_view(self):
+        """
+        A read-only view of the whole blackboard.
+
+        For code that judges the system rather than taking part in it -- a
+        bblearn reward function, for instance. A reward is a critic, so
+        restricting it to the representations the module under test happens to
+        declare is backwards: the things worth judging are usually elsewhere.
+        """
+        return _BlackboardView(self, readable_keys=self.list_content(), writable_keys=[])
+
     def data_locks_for(self, module_handler: ModuleHandler):
         """
         The data locks of every representation a module touches.
