@@ -115,6 +115,10 @@ class BbMuseProject():
 
     def run(self, *args, **kwargs):
         self.controller.run(*args, **kwargs)
+
+    def step(self, *args, **kwargs):
+        """ Run a fixed number of cycles deterministically. See Controller.step(). """
+        return self.controller.step(*args, **kwargs)
         
 
     """

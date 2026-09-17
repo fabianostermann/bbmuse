@@ -40,6 +40,13 @@ def start_headless(args):
     if args.verify_build:
         logger.info("Build ended without errors.")
         plot_dependency_graph(project)
+    elif args.steps is not None:
+        logger.info("Run project for %s deterministic cycles..", args.steps)
+        try:
+            project.step(n_cycles=args.steps, run_mode=args.mode, seed=args.seed)
+        except Exception:
+            logger.exception("Failure while running project.")
+            sys.exit(1)
     else:
         logger.info("Run project..")
         try:
@@ -71,6 +78,8 @@ def process_args():
 
     parser.add_argument("--verify-build", action="store_true", help="Verify if project can be build without errors and creates a plot of the dependency graph. Will not run afterwards.")
     parser.add_argument("--quit-after", type=float, default=-1, help="Quit after the given time in seconds.")
+    parser.add_argument("--steps", type=int, default=None, help="Run exactly this many cycles single-threaded and deterministically, then quit. Ignores RATE declarations.")
+    parser.add_argument("--seed", type=int, default=None, help="Seed random, numpy and torch before running. Most useful together with --steps.")
     
     parser.add_argument('--version', action='version', version=f"%(prog)s {prog_version}")
     args = parser.parse_args()

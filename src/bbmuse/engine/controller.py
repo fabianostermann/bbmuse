@@ -7,6 +7,7 @@ import gc
 
 from bbmuse.engine.blackboard import Blackboard
 from bbmuse.engine.control_group import ControlGroup
+from bbmuse.engine.snapshot import snapshot_component
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,82 @@ class Controller:
 
             for mod_handler in self.module_handlers:
                 mod_handler.print_timing_stats()
+
+    def step(self, n_cycles=1, run_mode=0, seed=None):
+        """
+        Run n_cycles of the whole project on this thread, deterministically.
+
+        No control group threads are started: every module is called once per
+        cycle in the single global execution order, so the result does not
+        depend on thread scheduling and two runs of the same project with the
+        same seed produce the same blackboard. RATE declarations are ignored,
+        since there is no wall clock to be late against.
+
+        This is what makes a project testable and a bblearn recording
+        reproducible. Returns the number of cycles actually run.
+        """
+        if seed is not None:
+            self.seed_random_sources(seed)
+
+        logger.info("Call _init() on all modules..")
+        for mod_handler in self.module_handlers:
+            mod_handler.call_init()
+
+        delayed_names = sorted({name
+            for handler in self.module_handlers
+            for name in handler.get_delayed()})
+        views = {handler: self.blackboard.create_view(handler)
+            for handler in self.module_handlers}
+
+        self._running = True
+        cycles_run = 0
+        try:
+            for _ in range(n_cycles):
+                if not self._running:
+                    break
+
+                snapshots = {name: snapshot_component(self.blackboard.get(name).get_component())
+                    for name in delayed_names}
+                for view in views.values():
+                    view._set_delayed_snapshots(snapshots)
+
+                for mod_handler in self.execution_order:
+                    if not mod_handler.is_active():
+                        continue
+                    mod_handler.call_update(views[mod_handler])
+                    if run_mode < 0: # DEBUG mode
+                        for rep_name in mod_handler.get_provides():
+                            self.blackboard.get(rep_name).call_validate()
+                cycles_run += 1
+        finally:
+            logger.info("Call _close() on all modules..")
+            for mod_handler in self.module_handlers:
+                try:
+                    mod_handler.call_close()
+                except Exception:
+                    logger.exception("Error while closing module %s.", mod_handler)
+
+        logger.info("Ran %s deterministic cycles.", cycles_run)
+        for mod_handler in self.module_handlers:
+            mod_handler.print_timing_stats()
+        return cycles_run
+
+    def seed_random_sources(self, seed):
+        import random
+        random.seed(seed)
+        logger.debug("Seeded random with %s", seed)
+        try:
+            import numpy
+            numpy.random.seed(seed)
+            logger.debug("Seeded numpy.random with %s", seed)
+        except ImportError:
+            pass
+        try:
+            import torch
+            torch.manual_seed(seed)
+            logger.debug("Seeded torch with %s", seed)
+        except ImportError:
+            pass
 
     def halt(self):
         self._running = False
