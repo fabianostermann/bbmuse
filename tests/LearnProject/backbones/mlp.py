@@ -1,5 +1,8 @@
+import torch
+import torch.nn as nn
+
 class MLPBackbone(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int):
+    def __init__(self, in_dim: int, hidden_dim: int = 256):
         super().__init__()
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
