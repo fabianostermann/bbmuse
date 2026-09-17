@@ -19,6 +19,10 @@ class Config(dict):
                     "modules": [ "modules/" ],
                     "representations": [ "representations/" ],
                 },
+                "transport": {
+                    "tempo": 120.0,
+                    "ppq": 960,
+                },
                 "bblearn": {
                     "work": ".bblearn/",
                     "backbones": "backbones/",

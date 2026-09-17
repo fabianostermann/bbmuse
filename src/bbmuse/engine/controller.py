@@ -212,7 +212,7 @@ class Controller:
             for mod_handler in self.module_handlers:
                 mod_handler.print_timing_stats()
 
-    def step(self, n_cycles=1, run_mode=0, seed=None):
+    def step(self, n_cycles=1, run_mode=0, seed=None, seconds_per_cycle=0.01):
         """
         Run n_cycles of the whole project on this thread, deterministically.
 
@@ -222,9 +222,20 @@ class Controller:
         same seed produce the same blackboard. RATE declarations are ignored,
         since there is no wall clock to be late against.
 
+        If the blackboard's transport is virtual it is advanced by
+        seconds_per_cycle each cycle, so scheduled events fire at reproducible
+        cycles rather than at whatever the wall clock happened to say.
+
         This is what makes a project testable and a bblearn recording
         reproducible. Returns the number of cycles actually run.
         """
+        transport = self.blackboard.get_transport()
+        virtual = getattr(transport, "_virtual", False)
+        if not virtual:
+            logger.warning(
+                "Stepping with a real-time transport: bb.transport.now still follows the "
+                "wall clock, so anything driven by it will not be reproducible. Build the "
+                "project with virtual_transport=True for a fully deterministic run.")
         if seed is not None:
             self.seed_random_sources(seed)
 
@@ -244,6 +255,9 @@ class Controller:
             for _ in range(n_cycles):
                 if not self._running:
                     break
+
+                if virtual:
+                    transport.advance_virtual(seconds_per_cycle)
 
                 snapshots = {name: snapshot_component(self.blackboard.get(name).get_component())
                     for name in delayed_names}

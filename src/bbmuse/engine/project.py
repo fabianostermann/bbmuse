@@ -12,6 +12,7 @@ from bbmuse.engine.blackboard import Blackboard
 from bbmuse.engine.controller import Controller
 from bbmuse.engine.module_handler import ModuleHandler
 from bbmuse.engine.representation_handler import RepresentationHandler
+from bbmuse.engine.transport import Transport
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +27,10 @@ class BbMuseProject():
         
         os.chdir(self.config.get_project_dir())
 
-    def build_all(self, strict=False):
+    def build_all(self, strict=False, virtual_transport=False):
         self.prepare_handlers()
         self.build_handlers()
-        self.build_controller(strict=strict)
+        self.build_controller(strict=strict, virtual_transport=virtual_transport)
     
     def prepare_handlers(self):
         # Search for module defintion files
@@ -140,9 +141,14 @@ class BbMuseProject():
         # "defined but failed to import" when a dependency turns up missing
         self.failed_representation_names = failed_reps
 
-    def build_controller(self, strict=False):
+    def build_controller(self, strict=False, virtual_transport=False):
         # create blackboard
-        blackboard = Blackboard(self.representation_handlers)
+        transport_config = self.config["transport"]
+        transport = Transport(tempo=transport_config["tempo"], ppq=transport_config["ppq"],
+            virtual=virtual_transport)
+        logger.info("Transport: %s BPM, %s ticks per quarter note%s",
+            transport.tempo, transport.ppq, " (virtual clock)" if virtual_transport else "")
+        blackboard = Blackboard(self.representation_handlers, transport=transport)
 
         # build controller
         self.controller = Controller(self.module_handlers, blackboard,
@@ -171,6 +177,9 @@ class BbMuseProject():
 
     def get_blackboard(self):
         return self.controller.blackboard
+
+    def get_transport(self):
+        return self.controller.blackboard.get_transport()
 
 
 

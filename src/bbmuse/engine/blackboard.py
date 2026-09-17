@@ -2,13 +2,15 @@ import logging
 
 from bbmuse.engine.module_handler import ModuleHandler
 from bbmuse.engine.representation_handler import RepresentationHandler
+from bbmuse.engine.transport import Transport, _TransportView
 
 logger = logging.getLogger(__name__)
 
 class Blackboard:
 
-    def __init__(self, representation_handlers=None):
+    def __init__(self, representation_handlers=None, transport: Transport = None):
         self._board = {}
+        self._transport = transport or Transport()
         for rep in representation_handlers or []:
             self.register(rep)
 
@@ -36,11 +38,15 @@ class Blackboard:
         """ returns a representation handler by name """
         return self._board[name]
 
+    def get_transport(self):
+        return self._transport
+
     def create_view(self, module_handler: ModuleHandler):
         readable_keys = module_handler.get_requires() + module_handler.get_uses()
         writable_keys = module_handler.get_provides()
         return _BlackboardView(self, readable_keys, writable_keys,
-            delayed_keys=module_handler.get_delayed())
+            delayed_keys=module_handler.get_delayed(),
+            transport=self._transport, owner_name=module_handler.get_name())
 
     def create_observer_view(self):
         """
@@ -51,7 +57,8 @@ class Blackboard:
         restricting it to the representations the module under test happens to
         declare is backwards: the things worth judging are usually elsewhere.
         """
-        return _BlackboardView(self, readable_keys=self.list_content(), writable_keys=[])
+        return _BlackboardView(self, readable_keys=self.list_content(), writable_keys=[],
+            transport=self._transport, owner_name="observer")
 
     def data_locks_for(self, module_handler: ModuleHandler):
         """
@@ -72,7 +79,7 @@ class Blackboard:
 class _BlackboardView:
 
     def __init__(self, blackboard: Blackboard, readable_keys=None, writable_keys=None,
-            delayed_keys=None):
+            delayed_keys=None, transport: Transport = None, owner_name=""):
         rep_views = {}
         for readable_key in readable_keys:
             rep_views[readable_key] = blackboard.get(readable_key).create_view(read_only=True)
@@ -80,11 +87,18 @@ class _BlackboardView:
             rep_views[writable_key] = blackboard.get(writable_key).create_view(read_only=False)
         object.__setattr__(self, "_rep_views", rep_views)
         object.__setattr__(self, "_prev", _DelayedView(list(delayed_keys or [])))
+        object.__setattr__(self, "_transport_view",
+            _TransportView(transport or Transport(), owner_name))
 
     @property
     def prev(self):
         """ The declared DELAYED representations as they were last cycle. """
         return self._prev
+
+    @property
+    def transport(self):
+        """ The project's musical clock, plus this module's own event queue. """
+        return self._transport_view
 
     def _set_delayed_snapshots(self, snapshots):
         self._prev._replace(snapshots)

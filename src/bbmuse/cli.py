@@ -32,7 +32,9 @@ def start_headless(args):
     logger.info("Build project..")
     try:
         # DEBUG mode refuses a project whose declared dependencies are unordered
-        project.build_all(strict=args.mode < 0)
+        # --steps wants a virtual clock, so that anything driven by the
+        # transport is reproducible rather than following the wall clock
+        project.build_all(strict=args.mode < 0, virtual_transport=args.steps is not None)
     except Exception:
         logger.exception("Building project failed.")
         sys.exit(1)
@@ -43,7 +45,8 @@ def start_headless(args):
     elif args.steps is not None:
         logger.info("Run project for %s deterministic cycles..", args.steps)
         try:
-            project.step(n_cycles=args.steps, run_mode=args.mode, seed=args.seed)
+            project.step(n_cycles=args.steps, run_mode=args.mode, seed=args.seed,
+                seconds_per_cycle=args.seconds_per_cycle)
         except Exception:
             logger.exception("Failure while running project.")
             sys.exit(1)
@@ -80,6 +83,7 @@ def process_args():
     parser.add_argument("--quit-after", type=float, default=-1, help="Quit after the given time in seconds.")
     parser.add_argument("--steps", type=int, default=None, help="Run exactly this many cycles single-threaded and deterministically, then quit. Ignores RATE declarations.")
     parser.add_argument("--seed", type=int, default=None, help="Seed random, numpy and torch before running. Most useful together with --steps.")
+    parser.add_argument("--seconds-per-cycle", type=float, default=0.01, help="With --steps: how much virtual time each cycle represents, for the transport clock.")
     
     parser.add_argument('--version', action='version', version=f"%(prog)s {prog_version}")
     args = parser.parse_args()
