@@ -1,0 +1,14 @@
+# bbmuse configuration file.
+# TOML Syntax
+
+[application]
+name = "Blackboard Project"
+description = "Demonstrates levels, triggers, arbitration and the transport."
+
+[blackboard]
+levels = [ "pulse", "harmony", "phrase" ]
+focus  = "bottom-up"
+
+[transport]
+tempo = 120
+ppq   = 960
