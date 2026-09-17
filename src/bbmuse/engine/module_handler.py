@@ -124,6 +124,19 @@ class ModuleHandler(BaseHandler):
         """ Representations this module reads as of the previous cycle. """
         return getattr(self.get_component(), "DELAYED", [])
 
+    def get_internal_state_names(self):
+        """
+        Module-level values that are neither contract declarations nor imports.
+
+        A module is free to keep state between updates, but anything learning
+        from it only sees the blackboard, so state held here is invisible to a
+        clone.
+        """
+        from bbmuse.engine.snapshot import data_attributes
+        contract = {"PROVIDES", "REQUIRES", "USES", "DELAYED", "GROUP", "RATE", "ACTIVE"}
+        return sorted(name for name in data_attributes(self.get_component())
+            if name not in contract)
+
     def get_rate(self):
         """
         Requested updates per second, or None to run as often as the group can.

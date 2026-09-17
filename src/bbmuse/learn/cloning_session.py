@@ -37,6 +37,8 @@ class CloningSession:
         self.tag = args.tag
         self.dry_run = args.dry_run
 
+        self.warn_about_internal_state()
+
         # load packed representations from recorded episodes
         ep_paths = self.module_manager.get_available_episode_paths(self.module_handler)
         if not ep_paths:
@@ -74,6 +76,23 @@ class CloningSession:
         output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
         path_to_backbone = self.get_path_to_backbone(args.backbone)
         self.clone_model = ModuleClone(input_dims_dict, output_dims_dict, path_to_backbone)
+
+    def warn_about_internal_state(self):
+        """
+        A clone maps this cycle's inputs to this cycle's outputs and has no
+        memory. A module that decides anything from values it keeps between
+        updates therefore cannot be reproduced by one, and the training loss
+        will not say so -- it will just plateau.
+        """
+        state_names = self.module_handler.get_internal_state_names()
+        if not state_names:
+            return
+        logger.warning(
+            "Module %s keeps state between updates (%s). A clone sees only the "
+            "blackboard and has no memory, so any behaviour that depends on these "
+            "cannot be learned. Put what matters into a representation the module "
+            "declares, or expect the clone to reproduce only the memoryless part.",
+            self.module_handler.get_name(), ", ".join(state_names))
 
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
