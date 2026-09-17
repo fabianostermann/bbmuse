@@ -241,7 +241,10 @@ class ModuleManager():
         modules_dir = Path(self._modules_dir)
         if not modules_dir.exists():
             return
-        self._remove_empty_dirs(modules_dir)
+        # the modules directory itself is kept even when it ends up empty
+        for subfolder in modules_dir.iterdir():
+            if subfolder.is_dir():
+                self._remove_empty_dirs(subfolder)
 
     def _remove_empty_dirs(self, folder: Path):
         for subfolder in folder.iterdir():
