@@ -23,10 +23,15 @@ class ModuleHandler(BaseHandler):
         self.timing_stats = None
 
         # check for required attributes
-        assert isinstance(self.get_provides(), list)
-        assert isinstance(self.get_requires(), list)
-        assert isinstance(self.get_uses(), list)
-        assert isinstance(self.get_group(), str)
+        for attr_name, expected_type in (("PROVIDES", list), ("REQUIRES", list),
+                ("USES", list), ("GROUP", str)):
+            if not hasattr(module, attr_name):
+                continue # optional: the getters below supply a default
+            value = getattr(module, attr_name)
+            if not isinstance(value, expected_type):
+                raise TypeError(
+                    f"{attr_name} in {self} must be a {expected_type.__name__}, "
+                    f"got {type(value).__name__}.")
 
         # check for required methods
         update_method = getattr(module, "_update", None)

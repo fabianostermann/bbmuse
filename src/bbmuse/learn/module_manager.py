@@ -88,7 +88,8 @@ class ModuleManager():
         return max(numbers) + 1 if numbers else 1
 
     def get_module_dir(self, module_handler):
-        assert not module_handler is None, "Argument should be a valid ModuleHandler object"
+        if module_handler is None:
+            raise ValueError("Argument should be a valid ModuleHandler object, got None.")
         return self._modules_dir / module_handler.get_name().lower()
 
     # TODO later: change function names and variables called "episodes" for listen & clone to "records" 

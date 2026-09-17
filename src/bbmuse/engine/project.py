@@ -78,7 +78,8 @@ class BbMuseProject():
             except Exception:
                 logger.exception("Build failed for module %s. Skip and ignore.", handler)
 
-        assert mod_handlers, "No modules were successfully build."
+        if not mod_handlers:
+            raise RuntimeError("No modules were built successfully. See the logged tracebacks above.")
 
         self.module_handlers = mod_handlers
         logger.debug("List of all provided and required representations: %s", all_provides_and_requires)
@@ -96,7 +97,8 @@ class BbMuseProject():
             else:
                 logger.warning("%s not found in provided or required representations. Skip import.", handler.get_name())
 
-        assert rep_handlers, "No representations were successfully build."
+        if not rep_handlers:
+            raise RuntimeError("No representations were built successfully. See the logged tracebacks above.")
         self.representation_handlers = rep_handlers
         # remembered so the controller can tell "never defined" apart from
         # "defined but failed to import" when a dependency turns up missing
