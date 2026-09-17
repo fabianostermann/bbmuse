@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import importlib.util
 import inspect
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,12 @@ class BaseHandler():
         self._name = path.stem
 
         self.project_id = project_id
-        
+
+        # consider_hot_reload() is called from the controller thread, from every
+        # control group thread and from call_update(); serialise so a reload
+        # cannot run twice concurrently or swap the component mid-update
+        self._reload_lock = threading.RLock()
+
         self.consider_hot_reload()
         
         self._component = None
@@ -48,12 +54,16 @@ class BaseHandler():
         if not hasattr(self, "_last_mtime"):
             self._last_mtime = self.get_mtime()
             return
-    	
+
         curr_mtime = self.get_mtime()
         # reload if last modification time is older than 1 second
         if self._last_mtime + 1 < curr_mtime:
-            self.hot_reload()
-            self._last_mtime = curr_mtime
+            with self._reload_lock:
+                # re-check under the lock: another thread may have reloaded
+                # this very file while we were waiting for it
+                if self._last_mtime + 1 < curr_mtime:
+                    self.hot_reload()
+                    self._last_mtime = curr_mtime
     	
     def get_mtime(self):
         if self._file_location:
