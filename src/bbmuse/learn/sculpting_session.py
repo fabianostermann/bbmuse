@@ -24,6 +24,9 @@ from bbmuse.learn.policy_model import PolicyModel
 from bbmuse.learn.session_logger import SessionLogger
 from bbmuse.learn.reward import Reward
 
+def _mean(values):
+    return sum(values) / len(values) if values else 0.0
+
 class SculptingSession:
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
         self.project = project
@@ -109,6 +112,8 @@ class SculptingSession:
         self.policy_model.to(self.device)
         optimizer = torch.optim.Adam(self.policy_model.parameters(), lr=lr)
 
+        # defined up here so a degenerate num_updates=0 still saves a model
+        update = 0
         epoch_loss = 0.0
         with tqdm(range(num_updates+1)) as pbar:
             start_walltime = time()
@@ -138,6 +143,8 @@ class SculptingSession:
                     logger.debug("Train policy model (learning phase)..")
 
                     T = next(iter(states.values())).shape[0]
+                    # also covers epochs=0, where the inner loop never runs
+                    n_batches, epoch_policy_loss, epoch_entropy, epoch_bc_loss = 0, [], [], []
                     for epoch in range(epochs):
                         indices = torch.randperm(T, device=self.device)
 
@@ -177,7 +184,9 @@ class SculptingSession:
                                     eps = 0.2
                                     clipped = torch.clamp(r, 1 - eps, 1 + eps)
                                     policy_loss = -torch.mean(torch.min(r * A, clipped * A))
-                                epoch_policy_loss.append(float(policy_loss))
+                                # policy_loss stays a plain 0.0 when there are no advantages
+                                epoch_policy_loss.append(
+                                    policy_loss.item() if torch.is_tensor(policy_loss) else policy_loss)
 
                                 # entropy loss
                                 entropy = torch.mean(entropies[head_name])
@@ -212,9 +221,9 @@ class SculptingSession:
                     session_logger.log({
                         "num_updates": update,
                         "weighted_loss": epoch_loss,
-                        "policy_loss": sum(epoch_policy_loss)/len(epoch_policy_loss),
-                        "entropy": sum(epoch_entropy)/len(epoch_entropy),
-                        "bc_loss": sum(epoch_bc_loss)/len(epoch_bc_loss),
+                        "policy_loss": _mean(epoch_policy_loss),
+                        "entropy": _mean(epoch_entropy),
+                        "bc_loss": _mean(epoch_bc_loss),
                         "walltime": time()-start_walltime,
                     }).step()
 
