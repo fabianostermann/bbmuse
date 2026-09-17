@@ -67,6 +67,7 @@ def process_args():
     sub_apply.add_argument('--list', action='store_true', help="List all available models")
     sub_apply.add_argument('--clone', metavar='<id>', type=str, help="Use clone model with specified ID")
     sub_apply.add_argument('--sculpt', metavar='<id>', type=str, help="Use sculpt model with specified ID")
+    sub_apply.add_argument("--device", default=None, type=str, help="Torch device the applied model runs on (default: cpu)")
 
     sub_restore = subparsers.add_parser("restore", help='Restore the original module file from an applied one.', parents=[common])
     sub_restore.add_argument('module', nargs=1, help="Path or name of a module")

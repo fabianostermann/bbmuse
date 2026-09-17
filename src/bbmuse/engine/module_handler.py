@@ -12,6 +12,20 @@ logger = logging.getLogger(__name__)
 
 class ModuleHandler(BaseHandler):
 
+    # set by the project when a trained model has been applied to this module;
+    # a callable taking the handler and returning something with install()
+    _implementation_override = None
+
+    def set_implementation_override(self, factory):
+        """
+        Run something other than the module's own _update().
+
+        The module file is still imported and still supplies the whole
+        contract; only the lifecycle hooks are replaced. Used by 'bblearn
+        apply' so that swapping in a trained model never edits source.
+        """
+        self._implementation_override = factory
+
     def build(self):
         logger.debug("Building %s..", self)
         
@@ -53,6 +67,10 @@ class ModuleHandler(BaseHandler):
                 group = "" if self.get_group() == "default" else f" (group:{self.get_group()})"
                 print(f"MODULE {self.get_name()}{group}:", *args, **kwargs)
         module.print = print_with_name_tag
+
+        if self._implementation_override is not None:
+            self._implementation_override(self).install(module)
+            logger.info("Module %s runs an applied model instead of its own _update().", self)
 
     def hot_reload(self):
         logger.debug("Hot-reloading %s..", self)

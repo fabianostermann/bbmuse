@@ -46,6 +46,8 @@ class BbMuseProject():
             raise RuntimeError("Did not find any module definitions.")
         logger.debug("Init modules: %s", mods_handlers)
 
+        self.attach_applied_models(mods_handlers)
+
         # Search for representation defintion files
         reps_handlers = []
         for location in self.config["path"]["representations"]:
@@ -63,6 +65,40 @@ class BbMuseProject():
         # run build() to fill the following
         self.module_handlers = []
         self.representation_handlers = []
+
+    def attach_applied_models(self, module_handlers):
+        """
+        Hand any module with an applied model an implementation that runs it.
+
+        The table lives in the bblearn working directory, so a project without
+        bblearn never reaches the import below and never needs torch.
+        """
+        work_dir = self.config.get_project_dir() / self.config["bblearn"]["work"]
+        table_path = work_dir / "applied.toml"
+        if not table_path.exists():
+            return
+
+        import tomllib
+        with open(table_path, "rb") as f:
+            table = tomllib.load(f)
+        if not table:
+            return
+
+        by_name = {handler.get_name().lower(): handler for handler in module_handlers}
+        for module_name, entry in table.items():
+            handler = by_name.get(module_name.lower())
+            if handler is None:
+                logger.warning("Applied model listed for unknown module %s. Ignored.", module_name)
+                continue
+            checkpoint = work_dir.joinpath(entry["checkpoint"])
+            device = entry.get("device", "cpu")
+
+            def make_implementation(mod_handler, checkpoint=checkpoint, device=device):
+                from bbmuse.learn.applied import NeuralImplementation
+                return NeuralImplementation(mod_handler, checkpoint, device)
+
+            handler.set_implementation_override(make_implementation)
+            logger.info("Module %s has an applied model: %s", handler, checkpoint)
 
     def build_handlers(self):
         all_provides_and_requires = []
