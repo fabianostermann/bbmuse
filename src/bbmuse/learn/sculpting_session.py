@@ -140,6 +140,7 @@ class SculptingSession:
                         indices = torch.randperm(T, device=self.device)
 
                         epoch_loss = 0.0
+                        n_batches = 0
                         epoch_policy_loss = []
                         epoch_entropy = []
                         epoch_bc_loss = []
@@ -174,20 +175,21 @@ class SculptingSession:
                                     eps = 0.2
                                     clipped = torch.clamp(r, 1 - eps, 1 + eps)
                                     policy_loss = -torch.mean(torch.min(r * A, clipped * A))
-                                epoch_policy_loss.append(policy_loss)
+                                epoch_policy_loss.append(float(policy_loss))
 
                                 # entropy loss
-                                entropy = torch.mean(entropies[head_name])  # negative because we want to maximize entropy
-                                epoch_entropy.append(entropy)
+                                entropy = torch.mean(entropies[head_name])
+                                epoch_entropy.append(entropy.item())
                                 
                                 # BC loss
                                 bc_pred = pred_actions[head_name]           # what policy did
                                 bc_target = batch_oracle[head_name] # what original module did
                                 bc_loss = loss_functions[head_name](bc_pred, bc_target)
-                                epoch_bc_loss.append(bc_loss)
+                                epoch_bc_loss.append(bc_loss.item())
                                 
                                 loss_contribution = sum([
                                     policy_loss,
+                                    # negated because entropy is to be maximized
                                     entropy_coef * -entropy,
                                     bc_coef * bc_loss,
                                 ]) / len(new_log_probs) # important because decouples task count from hyperparameter tuning
@@ -198,7 +200,12 @@ class SculptingSession:
                             batch_loss.backward()  # one backward through the full shared graph
                             optimizer.step()
 
-                            epoch_loss += batch_loss / len(indices)
+                            # detach: keeping the graph-attached tensor would pin
+                            # every batch's autograd graph for the whole epoch
+                            epoch_loss += batch_loss.item()
+                            n_batches += 1
+
+                    epoch_loss = epoch_loss / n_batches if n_batches else 0.0
 
                     session_logger.log({
                         "num_updates": update,
