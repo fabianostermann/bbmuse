@@ -2,13 +2,11 @@ GROUP = "special"
 REQUIRES = [ "RepConfig" ]
 DELAYED = [ "Clock" ]   # provided by Timer in the 'default' group
 PROVIDES = [ "RepA" ]
-
-import time
+RATE = 5   # five updates per second, scheduled by the control group
 
 internal_var = 0
 
 def _update(bb):
-    time.sleep(0.2)
     #bb.RepA = "Overwriting blackboard entries should be forbidden."
 
     bb.RepA.ValueA += 2

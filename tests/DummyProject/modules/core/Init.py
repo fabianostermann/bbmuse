@@ -1,4 +1,5 @@
-PROVIDES = [ "BibRep" ]    
+PROVIDES = [ "BibRep" ]
+RATE = 1   # constants only need refreshing rarely
 
 def _update(bb):
     # Does nothing but providing the constant values.
