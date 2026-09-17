@@ -92,6 +92,7 @@ class SculptingSession:
         bc_coef = 0.01,
         fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = 10,
+        seconds_per_rollout: float = 2,
     ) -> None:
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
 
@@ -117,7 +118,8 @@ class SculptingSession:
                     logger.debug("Start collecting trajectories (exploration phase)..")
 
                     # collect trajectories with current policy
-                    trajectories = self.collect(self.policy_model, self.project, self.prober)
+                    trajectories = self.collect(self.policy_model, self.project, self.prober,
+                        seconds_per_rollout)
                     advantages, named_returns = self.compute_advantages(trajectories)
                     mean_returns = {f"rew_{name}": v.mean().item() for name, v in named_returns.items()}
 
@@ -234,11 +236,11 @@ class SculptingSession:
             pt.save(self.policy_model.model, update, epoch_loss, optimizer)
             session_logger.write_to_disk()
         
-    def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber):
+    def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber, seconds_per_rollout: float = 2):
         # run policy -> collect episodes
         policy_model.eval() # deactivate dropout, BatchNorm etc.
         with torch.no_grad():
-            env.run(quit_after=2, run_mode=0)
+            env.run(quit_after=seconds_per_rollout, run_mode=0)
 
         trajectories = prober.flush()
         return trajectories
