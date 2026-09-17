@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 import argparse
@@ -86,8 +87,11 @@ def process_args():
         logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.DEBUG, force=True)
     if args.silent:
         logging.getLogger().setLevel(logging.CRITICAL+1)
-        sys.stdout = None
-        sys.stderr = None
+        # redirect rather than unbind: setting these to None makes any later
+        # print() or progress bar raise AttributeError on a None file object
+        devnull = open(os.devnull, "w")
+        sys.stdout = devnull
+        sys.stderr = devnull
 
     logger.debug("Args: %s", args)
 
