@@ -33,7 +33,6 @@ class ApplyRestoreSession:
         self.init(args)
 
         if not args.list:
-            ckpt_path = None
             models_dir = None
 
             if args.sculpt:
@@ -47,7 +46,6 @@ class ApplyRestoreSession:
             if models_dir:
                 model_path = self.module_manager.get_final_model_path(models_dir)
                 if model_path.exists():
-                    ckpt_path = model_path                
                     self.write_apply(
                         self.module_handler.get_file_location(),
                         model_path,
@@ -74,7 +72,7 @@ class ApplyRestoreSession:
         
         # add warning how to use the modified file
         content = USER_WARNING_STUB.replace(
-            "###<bblearn---modle_name>###",
+            "###<bblearn---module_name>###",
             self.module_handler.get_name()) \
             + '\n' + content
         
@@ -150,7 +148,7 @@ USER_WARNING_STUB = """####
 #    Do not modify manually, if you do not exactly know what you are doing.
 #
 #    The intended way to restore this file is running:
-#    $ bblearn restore ###<bblearn---modle_name>###
+#    $ bblearn restore ###<bblearn---module_name>###
 #
 ####
 """
@@ -189,7 +187,6 @@ def _init():
     # sanity check: make sure the declared reps actually match this checkpoint
     expected_inputs = set(USES) | set(REQUIRES)
     expected_outputs = set(PROVIDES)
-    print(_model.config["input_dims"])
     actual_inputs = set(_model.config["input_dims"].keys())
     actual_outputs = set(_model.config["output_dims"].keys())
     assert expected_inputs == actual_inputs, \
@@ -198,8 +195,8 @@ def _init():
         f"PROVIDES {expected_outputs} do not match checkpoint outputs {actual_outputs}"
 
     print(
-        "Loaded clone checkpoint from '%s' (trained epoch=%s, loss=%.6f)",
-        CHECKPOINT_PATH, _checkpoint.get_epoch(), _checkpoint.get_loss(),
+        f"Loaded clone checkpoint from '{CHECKPOINT_PATH}' "
+        f"(trained epoch={_checkpoint.get_epoch()}, loss={_checkpoint.get_loss():.6f})"
     )
 
 
