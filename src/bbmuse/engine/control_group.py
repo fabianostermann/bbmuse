@@ -44,10 +44,14 @@ class ControlGroup:
 
     def build_blackboard_views(self):
         bb_views = {}
+        trigger_views = {}
         for handler in self.module_handlers:
             bb_views[handler] = self.blackboard.create_view(handler)
+            if handler.has_trigger():
+                trigger_views[handler] = self.blackboard.create_trigger_view(handler)
 
         self.blackboard_views = bb_views
+        self.trigger_views = trigger_views
 
     def start(self, run_mode=0):
         self.run_mode = run_mode
@@ -102,11 +106,15 @@ class ControlGroup:
                             with ExitStack() as locks:
                                 for data_lock in self.data_locks[mod_handler]:
                                     locks.enter_context(data_lock)
-                                before = self.snapshot_read_only(mod_handler)
-                                mod_handler.call_update(self.blackboard_views[mod_handler])
-                                self.check_read_only_untouched(mod_handler, before)
 
-                        if self.run_mode < 0: # DEBUG mode
+                                fired = self.module_wants_to_run(mod_handler)
+                                mod_handler.note_cycle(fired)
+                                if fired:
+                                    before = self.snapshot_read_only(mod_handler)
+                                    mod_handler.call_update(self.blackboard_views[mod_handler])
+                                    self.check_read_only_untouched(mod_handler, before)
+
+                        if fired and self.run_mode < 0: # DEBUG mode
                             try:
                                 for rep_name in mod_handler.get_provides():
                                     self.blackboard.get(rep_name).call_validate()
@@ -150,6 +158,16 @@ class ControlGroup:
         delay = min(waits)
         if delay > 0:
             sleep(delay)
+
+    def module_wants_to_run(self, mod_handler):
+        """
+        Ask the module's _trigger(), under the same locks its update would
+        hold, so the state it decides from is the state it would act on.
+        """
+        trigger_view = self.trigger_views.get(mod_handler)
+        if trigger_view is None:
+            return True
+        return mod_handler.should_update(trigger_view)
 
     def snapshot_read_only(self, mod_handler):
         """

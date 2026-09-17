@@ -1,6 +1,8 @@
 import logging
 
 from collections import defaultdict, deque
+from heapq import heappush, heappop
+from itertools import count
 from time import time, sleep
 
 import gc
@@ -35,6 +37,11 @@ class Controller:
         self.build_execution_order()
         self.report_deprecated_uses()
         self.report_cross_group_requires(strict=strict)
+
+    def effective_priority(self, handler):
+        """ A module's declared PRIORITY, or 0 when it has none. """
+        declared = handler.get_priority()
+        return 0 if declared is None else declared
 
     def report_deprecated_uses(self):
         """
@@ -128,17 +135,28 @@ class Controller:
         logger.debug("Map provider -> list of consumers: %s", graph)
         logger.debug("Num. of consumers per provider %s:", num_of_consumers)
 
-        # Topological Sort: Kahn's algorithm (doi:10.1145/368996.369025)
-        ready = deque([m for m, deg in num_of_consumers.items() if deg == 0])
-        exec_order = []
+        # Topological Sort: Kahn's algorithm (doi:10.1145/368996.369025).
+        # Among modules that are ready at the same time, higher PRIORITY goes
+        # first; the sequence counter keeps the rest in discovery order, so the
+        # result is deterministic. Priority only ever breaks ties -- a module
+        # is never ordered before something it REQUIRES.
+        sequence = count()
+        ready = []
+        def offer(handler):
+            heappush(ready, (-self.effective_priority(handler), next(sequence), handler))
 
+        for handler, degree in num_of_consumers.items():
+            if degree == 0:
+                offer(handler)
+
+        exec_order = []
         while ready:
-            handler = ready.popleft()
+            _, _, handler = heappop(ready)
             exec_order.append(handler)
             for neighbor in graph[handler]:
                 num_of_consumers[neighbor] -= 1
                 if num_of_consumers[neighbor] == 0:
-                    ready.append(neighbor)
+                    offer(neighbor)
         logger.debug(f"Proposed execution order: %s", exec_order)
 
         if len(exec_order) != len(self.module_handlers):
@@ -248,6 +266,8 @@ class Controller:
             for name in handler.get_delayed()})
         views = {handler: self.blackboard.create_view(handler)
             for handler in self.module_handlers}
+        trigger_views = {handler: self.blackboard.create_trigger_view(handler)
+            for handler in self.module_handlers if handler.has_trigger()}
 
         self._running = True
         cycles_run = 0
@@ -266,6 +286,12 @@ class Controller:
 
                 for mod_handler in self.execution_order:
                     if not mod_handler.is_active():
+                        continue
+                    trigger_view = trigger_views.get(mod_handler)
+                    fired = True if trigger_view is None \
+                        else mod_handler.should_update(trigger_view)
+                    mod_handler.note_cycle(fired)
+                    if not fired:
                         continue
                     mod_handler.call_update(views[mod_handler])
                     if run_mode < 0: # DEBUG mode

@@ -41,6 +41,20 @@ class Blackboard:
     def get_transport(self):
         return self._transport
 
+    def create_trigger_view(self, module_handler: ModuleHandler):
+        """
+        A read-only view for a module's _trigger().
+
+        A trigger is a predicate, so it sees everything the module declares --
+        including what it provides, so it can ask whether its own output is
+        stale -- but may not write any of it.
+        """
+        readable = list(dict.fromkeys(module_handler.get_requires()
+            + module_handler.get_uses() + module_handler.get_provides()))
+        return _BlackboardView(self, readable_keys=readable, writable_keys=[],
+            delayed_keys=module_handler.get_delayed(),
+            transport=self._transport, owner_name=module_handler.get_name())
+
     def create_view(self, module_handler: ModuleHandler):
         readable_keys = module_handler.get_requires() + module_handler.get_uses()
         writable_keys = module_handler.get_provides()

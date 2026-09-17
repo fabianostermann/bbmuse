@@ -35,10 +35,12 @@ class ModuleHandler(BaseHandler):
         # attributes
         self._is_running = False
         self.timing_stats = None
+        self.trigger_stats = None
 
         # check for required attributes
         for attr_name, expected_type in (("PROVIDES", list), ("REQUIRES", list),
-                ("USES", list), ("DELAYED", list), ("GROUP", str), ("RATE", (int, float))):
+                ("USES", list), ("DELAYED", list), ("GROUP", str), ("RATE", (int, float)),
+                ("PRIORITY", int)):
             if not hasattr(module, attr_name):
                 continue # optional: the getters below supply a default
             value = getattr(module, attr_name)
@@ -157,6 +159,40 @@ class ModuleHandler(BaseHandler):
     def is_active(self):
         return getattr(self.get_component(), "ACTIVE", True)
 
+    def get_priority(self):
+        """
+        Which of several ready modules goes first. Higher runs earlier.
+
+        Only breaks ties: a module is never scheduled before something it
+        REQUIRES, whatever its priority.
+        """
+        return getattr(self.get_component(), "PRIORITY", None)
+
+    def has_trigger(self):
+        return callable(getattr(self.get_component(), "_trigger", None))
+
+    def should_update(self, trigger_view):
+        """
+        Whether this module wants to run this cycle.
+
+        A module with no _trigger() runs every cycle, which is what every
+        module did before triggers existed. A module with one is asked, and
+        answers from the state of the blackboard -- that is what makes the
+        control opportunistic rather than a fixed schedule.
+        """
+        trigger = getattr(self.get_component(), "_trigger", None)
+        if not callable(trigger):
+            return True
+        return bool(trigger(trigger_view))
+
+    def note_cycle(self, fired):
+        """ Count how often this module was offered a cycle and took it. """
+        if self.trigger_stats is None:
+            self.trigger_stats = {"offered": 0, "fired": 0}
+        self.trigger_stats["offered"] += 1
+        if fired:
+            self.trigger_stats["fired"] += 1
+
     def call_init(self):
         if callable(getattr(self.get_component(), "_init", None)):
             self.get_component()._init()
@@ -200,12 +236,17 @@ class ModuleHandler(BaseHandler):
                 overruns = self.timing_stats.get("overruns", 0)
                 budget = (f" rate={rate}Hz budget={1000.0 / rate:.3f}ms"
                     f" overruns={overruns}/{self.timing_stats['n']}")
-            logger.info("Timing statistics for %s: mean=%sms min=%sms max=%sms%s",
+            fired = ""
+            if self.trigger_stats and self.has_trigger():
+                fired = (f" triggered={self.trigger_stats['fired']}"
+                    f"/{self.trigger_stats['offered']} cycles")
+            logger.info("Timing statistics for %s: mean=%sms min=%sms max=%sms%s%s",
                 self.get_name(),
                 round(self.timing_stats["mean"], 3),
                 round(self.timing_stats["min"], 3),
                 round(self.timing_stats["max"], 3),
                 budget,
+                fired,
             )
         else:
             logger.info("No timing statistics available for %s.", self.get_name())
