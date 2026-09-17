@@ -10,7 +10,7 @@ class BaseHandler():
 
     def __init__(self, path, project_id=""):
         path = Path(path)
-        if not path.exists() or not path.is_file:
+        if not path.exists() or not path.is_file():
             raise FileNotFoundError(f"File path is no valid file: {path}")
         self._file_location = path.absolute()
         self._name = path.stem
