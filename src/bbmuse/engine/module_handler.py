@@ -24,14 +24,19 @@ class ModuleHandler(BaseHandler):
 
         # check for required attributes
         for attr_name, expected_type in (("PROVIDES", list), ("REQUIRES", list),
-                ("USES", list), ("DELAYED", list), ("GROUP", str)):
+                ("USES", list), ("DELAYED", list), ("GROUP", str), ("RATE", (int, float))):
             if not hasattr(module, attr_name):
                 continue # optional: the getters below supply a default
             value = getattr(module, attr_name)
             if not isinstance(value, expected_type):
+                expected_name = expected_type.__name__ if isinstance(expected_type, type) \
+                    else " or ".join(t.__name__ for t in expected_type)
                 raise TypeError(
-                    f"{attr_name} in {self} must be a {expected_type.__name__}, "
+                    f"{attr_name} in {self} must be a {expected_name}, "
                     f"got {type(value).__name__}.")
+        if isinstance(getattr(module, "RATE", None), bool) or \
+                (getattr(module, "RATE", None) is not None and module.RATE <= 0):
+            raise ValueError(f"RATE in {self} must be a positive number of updates per second.")
 
         # check for required methods
         update_method = getattr(module, "_update", None)
@@ -100,6 +105,20 @@ class ModuleHandler(BaseHandler):
     def get_delayed(self):
         """ Representations this module reads as of the previous cycle. """
         return getattr(self.get_component(), "DELAYED", [])
+
+    def get_rate(self):
+        """
+        Requested updates per second, or None to run as often as the group can.
+
+        Declaring a rate is how a module asks to be called periodically. Doing
+        it with time.sleep() inside _update() instead stalls every module that
+        shares a representation with it.
+        """
+        return getattr(self.get_component(), "RATE", None)
+
+    def get_period(self):
+        rate = self.get_rate()
+        return None if rate is None else 1.0 / rate
         
     def get_group(self):
         return getattr(self.get_component(), "GROUP", "default")
@@ -121,12 +140,15 @@ class ModuleHandler(BaseHandler):
 
     def _update_timing_stats(self, delta_secs):
         delta = delta_secs * 1000 # sec -> ms
+        period = self.get_period()
+        overrun = period is not None and delta_secs > period
         if not self.timing_stats:
             self.timing_stats = {
                 "n": 1,
                 "mean": delta,
                 "min": delta,
                 "max": delta,
+                "overruns": 1 if overrun else 0,
             }
         else:
             stats = self.timing_stats
@@ -136,14 +158,23 @@ class ModuleHandler(BaseHandler):
             if delta > stats["max"]:
                 stats["max"] = delta
             stats["mean"] += (delta - stats["mean"]) / stats["n"]
+            if overrun:
+                stats["overruns"] += 1
 
     def print_timing_stats(self):
         if self.timing_stats:
-            logger.info("Timing statistics for %s: mean=%sms min=%sms max=%sms",
+            rate = self.get_rate()
+            budget = ""
+            if rate is not None:
+                overruns = self.timing_stats.get("overruns", 0)
+                budget = (f" rate={rate}Hz budget={1000.0 / rate:.3f}ms"
+                    f" overruns={overruns}/{self.timing_stats['n']}")
+            logger.info("Timing statistics for %s: mean=%sms min=%sms max=%sms%s",
                 self.get_name(),
                 round(self.timing_stats["mean"], 3),
                 round(self.timing_stats["min"], 3),
                 round(self.timing_stats["max"], 3),
+                budget,
             )
         else:
             logger.info("No timing statistics available for %s.", self.get_name())

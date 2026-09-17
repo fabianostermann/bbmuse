@@ -2,7 +2,7 @@ import logging
 
 from collections import defaultdict, deque
 from contextlib import ExitStack
-from time import time
+from time import monotonic, sleep, time
 
 import threading
 
@@ -38,6 +38,9 @@ class ControlGroup:
         self.delayed_names = sorted({name
             for handler in self.module_handlers
             for name in handler.get_delayed()})
+        # modules that asked to be called at a fixed rate; the rest run every cycle
+        self.periods = {handler: handler.get_period() for handler in self.module_handlers}
+        self.free_running = all(period is None for period in self.periods.values())
 
     def build_blackboard_views(self):
         bb_views = {}
@@ -63,10 +66,14 @@ class ControlGroup:
         self.logger.info(f"Execution order: %s", self.execution_order)
 
         self._running = True
+        # every rate-limited module is due immediately on the first cycle
+        next_due = {handler: monotonic() for handler in self.module_handlers}
 
         self.logger.info("Start running..")
         while self._running:
             start_time = time()
+
+            self.wait_until_due(next_due)
 
             # one snapshot per cycle, shared by every module in the group, so a
             # DELAYED read is the same value for all of them and cannot move
@@ -76,6 +83,15 @@ class ControlGroup:
             try:
                 for mod_handler in self.execution_order:
                     #self.logger.debug("Call _update() on module %s", mod_handler)
+
+                    period = self.periods[mod_handler]
+                    if period is not None:
+                        now = monotonic()
+                        if now < next_due[mod_handler]:
+                            continue # not due yet this cycle
+                        # advance on the ideal grid so the rate does not drift,
+                        # but never try to catch up a backlog after an overrun
+                        next_due[mod_handler] = max(next_due[mod_handler] + period, now)
 
                     try:
                         if self.run_mode <= 0: # DEBUG or NORMAL mode
@@ -114,6 +130,25 @@ class ControlGroup:
             cycle_count += 1
 
             #self.logger.debug(f"End of cycle {cycle_count}, delta={delta_time:.5f}")
+
+    def wait_until_due(self, next_due):
+        """
+        Sleep until the earliest rate-limited module is due.
+
+        Nothing is held while waiting, so a slow or infrequent module no longer
+        blocks anything. A group with no declared rates keeps running flat out,
+        which is the behaviour projects had before rates existed.
+        """
+        if self.free_running:
+            return
+        waits = [next_due[handler] - monotonic()
+            for handler, period in self.periods.items() if period is not None]
+        unpaced = any(period is None for period in self.periods.values())
+        if unpaced or not waits:
+            return # something wants to run as fast as it can
+        delay = min(waits)
+        if delay > 0:
+            sleep(delay)
 
     def take_delayed_snapshots(self):
         if not self.delayed_names:
