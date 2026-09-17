@@ -50,7 +50,7 @@ def process_args():
 
     sub_clone = subparsers.add_parser("clone", help='Train a model to mimic a specific module based on previously collected data.', parents=[common])
     sub_clone.add_argument('module', nargs=1, help="Path or name of a module")
-    sub_clone.add_argument("--backbone", default=None, type=str, help="Path to a backbone py file")
+    sub_clone.add_argument("--backbone", default=None, type=str, help="Name of a backbone py file in the backbones directory (not implemented yet)")
     sub_clone.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
     sub_clone.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
     sub_clone.add_argument("--epochs", type=int, default=20, help="Number of epochs to train.")
