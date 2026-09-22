@@ -93,14 +93,14 @@ def plot_dependency_graph(project, filename="graph.html", include_uses=True):
     pos = nx.multipartite_layout(G, subset_key="subset", align="horizontal", scale=2.0)
 
     # --- Build pyvis network ---
-    # FIX 1: toggle_physics() statt net.options.physics.enabled = False
+    # use toggle_physics() rather than net.options.physics.enabled = False
     net = Network(directed=True, height="750px", width="100%")
     net.toggle_physics(True)
 
     labels = {n: n.split(":", 1)[1] for n in G.nodes()}
 
-    # FIX 2+3: Nodes direkt hinzufügen statt from_nx() + nachträgliche Modifikation,
-    #          damit Attribute sicher gesetzt sind und nicht durch from_nx überschrieben werden.
+    # add the nodes directly instead of from_nx() plus later modification, so
+    # the attributes are set for certain and not overwritten by from_nx
     for node_id in G.nodes():
         kind = G.nodes[node_id]["kind"]
         x, y = pos[node_id]
@@ -117,7 +117,7 @@ def plot_dependency_graph(project, filename="graph.html", include_uses=True):
             font={"size": 14},
         )
 
-    # FIX 4: dashes=True (Boolean) statt [5, 5] (Array wird von pyvis nicht akzeptiert)
+    # dashes takes a boolean; pyvis does not accept an array such as [5, 5]
     for u, v, data in G.edges(data=True):
         kind = data.get("kind", "unknown")
         if kind == "requires":
@@ -129,10 +129,10 @@ def plot_dependency_graph(project, filename="graph.html", include_uses=True):
         else:
             net.add_edge(u, v)
 
-    # FIX 5+6: Pfad aus project.config wie im Original; write_html() statt show()
-    #          (show() braucht notebook=False in neueren Versionen und öffnet den Browser)
+    # path taken from project.config; write_html() rather than show(), which in
+    # newer versions needs notebook=False and opens a browser window
     if filename is None:
-        # Kein Dateipfad → im Browser öffnen (analog zu plt.show())
+        # no file path given -> open in the browser (the analogue of plt.show())
         net.show("graph.html", notebook=False)
     else:
         output_path = str(project.config.get_project_dir().joinpath(filename))

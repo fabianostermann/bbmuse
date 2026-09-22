@@ -26,3 +26,49 @@ To quickly test your installation, run: `bbmuse tests/DummyProject/ --quit-after
 
 For additional usage, run: `bbmuse --help`
 
+## The execution model
+
+A **module** is a Python file with an `_update(bb)` function and a handful of
+optional declarations. A **representation** is a Python file holding state.
+The engine reads the declarations, works out the order in which modules must
+run, and calls them in a loop.
+
+```python
+PROVIDES = [ "Harmony" ]   # written by this module; exactly one module may provide each
+REQUIRES = [ "Meter" ]     # read, and this module runs after whoever provides it
+DELAYED  = [ "Melody" ]    # read as of the previous cycle, via bb.prev.Melody
+GROUP    = "composition"   # which control group (thread) this module belongs to
+RATE     = 20              # updates per second; omit to run as often as possible
+```
+
+**Ordering.** `REQUIRES` is what orders modules, and it only orders them
+*within a control group*. Groups are separate threads, so an edge that crosses
+a group boundary gives no ordering and no one-to-one pairing -- the consumer
+sees whichever value happens to be there. The build warns about every such
+edge, and `--mode DEBUG` refuses to start.
+
+**Cycles.** A cycle built from `REQUIRES` is rejected. Break it with `DELAYED`,
+which reads a snapshot taken before the cycle began: the same value for every
+module in the group, unaffected by anything written during the cycle. That is
+also the right way to read across a group boundary. `USES` is the older,
+unordered live read; it still works but what it returns is not well defined,
+so prefer `DELAYED`.
+
+**Rates.** Declare `RATE` rather than sleeping inside `_update()`. The group
+schedules due modules and sleeps holding nothing, so an infrequent module costs
+nothing and does not hold anything up. Timing statistics report the budget and
+any overruns against it.
+
+**Concurrency.** Each representation carries its own lock, taken for the
+duration of an update in a fixed order. Modules whose representations do not
+overlap run in parallel; modules that share one serialise.
+
+**Determinism.** `bbmuse <dir> --steps N --seed S` runs the project
+single-threaded for exactly N cycles with the random sources seeded, so runs
+are reproducible and a project can be tested. `project.step(n_cycles, seed=...)`
+is the same thing from Python.
+
+**Checking.** `--mode DEBUG` additionally calls `_validate()` on every
+representation after it is written, and reports any module that mutates a
+representation it only declared as read-only.
+

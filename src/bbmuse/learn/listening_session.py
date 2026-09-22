@@ -30,13 +30,16 @@ class ListeningSession:
 
         for listener in listeners:
             rep_arrays = listener.flush()
+
+            if not rep_arrays:
+                logger.warning("Listener on %s recorded nothing. Nothing to write to disk.",
+                    listener.get_module_handler())
+                continue
+
             T = next(iter(rep_arrays.values())).shape[0]
             logger.debug(f"Listener on {listener.get_module_handler()} has finished with {T} timesteps.")
 
             if not args.dry_run:
-                if rep_arrays:
-                    ep_path = self.module_manager.get_next_episode_path(listener.get_module_handler(), tag=args.tag)
-                    np.savez_compressed(ep_path, **rep_arrays)
-                    logger.info("Record from ListeningSession stored at: %s", ep_path)
-                else:
-                    logger.warning("Rep_array was empty. Nothing to write to disk.")
+                ep_path = self.module_manager.get_next_episode_path(listener.get_module_handler(), tag=args.tag)
+                np.savez_compressed(ep_path, **rep_arrays)
+                logger.info("Record from ListeningSession stored at: %s", ep_path)

@@ -26,10 +26,10 @@ class BbMuseProject():
         
         os.chdir(self.config.get_project_dir())
 
-    def build_all(self):
+    def build_all(self, strict=False):
         self.prepare_handlers()
         self.build_handlers()
-        self.build_controller()
+        self.build_controller(strict=strict)
     
     def prepare_handlers(self):
         # Search for module defintion files
@@ -45,6 +45,8 @@ class BbMuseProject():
         if not mods_handlers:
             raise RuntimeError("Did not find any module definitions.")
         logger.debug("Init modules: %s", mods_handlers)
+
+        self.attach_applied_models(mods_handlers)
 
         # Search for representation defintion files
         reps_handlers = []
@@ -64,6 +66,40 @@ class BbMuseProject():
         self.module_handlers = []
         self.representation_handlers = []
 
+    def attach_applied_models(self, module_handlers):
+        """
+        Hand any module with an applied model an implementation that runs it.
+
+        The table lives in the bblearn working directory, so a project without
+        bblearn never reaches the import below and never needs torch.
+        """
+        work_dir = self.config.get_project_dir() / self.config["bblearn"]["work"]
+        table_path = work_dir / "applied.toml"
+        if not table_path.exists():
+            return
+
+        import tomllib
+        with open(table_path, "rb") as f:
+            table = tomllib.load(f)
+        if not table:
+            return
+
+        by_name = {handler.get_name().lower(): handler for handler in module_handlers}
+        for module_name, entry in table.items():
+            handler = by_name.get(module_name.lower())
+            if handler is None:
+                logger.warning("Applied model listed for unknown module %s. Ignored.", module_name)
+                continue
+            checkpoint = work_dir.joinpath(entry["checkpoint"])
+            device = entry.get("device", "cpu")
+
+            def make_implementation(mod_handler, checkpoint=checkpoint, device=device):
+                from bbmuse.learn.applied import NeuralImplementation
+                return NeuralImplementation(mod_handler, checkpoint, device)
+
+            handler.set_implementation_override(make_implementation)
+            logger.info("Module %s has an applied model: %s", handler, checkpoint)
+
     def build_handlers(self):
         all_provides_and_requires = []
         mod_handlers = []
@@ -78,12 +114,14 @@ class BbMuseProject():
             except Exception:
                 logger.exception("Build failed for module %s. Skip and ignore.", handler)
 
-        assert mod_handlers, "No modules were successfully build."
+        if not mod_handlers:
+            raise RuntimeError("No modules were built successfully. See the logged tracebacks above.")
 
         self.module_handlers = mod_handlers
         logger.debug("List of all provided and required representations: %s", all_provides_and_requires)
 
         rep_handlers = []
+        failed_reps = []
         for handler in self.potential_representation_handlers:
             if handler.get_name() in all_provides_and_requires:
                 try:
@@ -91,22 +129,32 @@ class BbMuseProject():
                     rep_handlers.append(handler)
                 except Exception:
                     logger.exception("Build failed for representation %s. Skip and ignore.", handler)
+                    failed_reps.append(handler.get_name())
             else:
                 logger.warning("%s not found in provided or required representations. Skip import.", handler.get_name())
 
-        assert rep_handlers, "No representations were successfully build."
+        if not rep_handlers:
+            raise RuntimeError("No representations were built successfully. See the logged tracebacks above.")
         self.representation_handlers = rep_handlers
+        # remembered so the controller can tell "never defined" apart from
+        # "defined but failed to import" when a dependency turns up missing
+        self.failed_representation_names = failed_reps
 
-    def build_controller(self):
+    def build_controller(self, strict=False):
         # create blackboard
         blackboard = Blackboard(self.representation_handlers)
 
         # build controller
-        self.controller = Controller(self.module_handlers, blackboard)
-        self.controller.build()
+        self.controller = Controller(self.module_handlers, blackboard,
+            failed_representation_names=getattr(self, "failed_representation_names", ()))
+        self.controller.build(strict=strict)
 
     def run(self, *args, **kwargs):
         self.controller.run(*args, **kwargs)
+
+    def step(self, *args, **kwargs):
+        """ Run a fixed number of cycles deterministically. See Controller.step(). """
+        return self.controller.step(*args, **kwargs)
         
 
     """

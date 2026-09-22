@@ -1,4 +1,5 @@
 PROVIDES = [ "WorkerInfo" ]
+RATE = 3
 
 import threading, queue, time
 
@@ -15,7 +16,6 @@ def _update(bb):
     event = str(time.time())[-3:]
     print(f"Put event {event} in queue..")
     WORKER_QUEUE.put(f"Event from Blackboard {event}")
-    time.sleep(0.3)
 
 def worker_loop():
     while not STOP.is_set():

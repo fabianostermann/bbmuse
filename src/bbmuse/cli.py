@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 import argparse
@@ -30,7 +31,8 @@ def start_headless(args):
 
     logger.info("Build project..")
     try:
-        project.build_all()
+        # DEBUG mode refuses a project whose declared dependencies are unordered
+        project.build_all(strict=args.mode < 0)
     except Exception:
         logger.exception("Building project failed.")
         sys.exit(1)
@@ -38,6 +40,13 @@ def start_headless(args):
     if args.verify_build:
         logger.info("Build ended without errors.")
         plot_dependency_graph(project)
+    elif args.steps is not None:
+        logger.info("Run project for %s deterministic cycles..", args.steps)
+        try:
+            project.step(n_cycles=args.steps, run_mode=args.mode, seed=args.seed)
+        except Exception:
+            logger.exception("Failure while running project.")
+            sys.exit(1)
     else:
         logger.info("Run project..")
         try:
@@ -54,6 +63,7 @@ def start_editor(args):
         import bbmuse.editor
     except Exception:
         logger.error("GUI is not implemented yet.")
+        sys.exit(1)
 
 def process_args():
     parser = argparse.ArgumentParser(prog="bbmuse", description="BlackBoard MUSic Engine")
@@ -68,6 +78,8 @@ def process_args():
 
     parser.add_argument("--verify-build", action="store_true", help="Verify if project can be build without errors and creates a plot of the dependency graph. Will not run afterwards.")
     parser.add_argument("--quit-after", type=float, default=-1, help="Quit after the given time in seconds.")
+    parser.add_argument("--steps", type=int, default=None, help="Run exactly this many cycles single-threaded and deterministically, then quit. Ignores RATE declarations.")
+    parser.add_argument("--seed", type=int, default=None, help="Seed random, numpy and torch before running. Most useful together with --steps.")
     
     parser.add_argument('--version', action='version', version=f"%(prog)s {prog_version}")
     args = parser.parse_args()
@@ -86,8 +98,11 @@ def process_args():
         logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.DEBUG, force=True)
     if args.silent:
         logging.getLogger().setLevel(logging.CRITICAL+1)
-        sys.stdout = None
-        sys.stderr = None
+        # redirect rather than unbind: setting these to None makes any later
+        # print() or progress bar raise AttributeError on a None file object
+        devnull = open(os.devnull, "w")
+        sys.stdout = devnull
+        sys.stderr = devnull
 
     logger.debug("Args: %s", args)
 

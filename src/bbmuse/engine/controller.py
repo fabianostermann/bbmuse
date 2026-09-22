@@ -7,14 +7,16 @@ import gc
 
 from bbmuse.engine.blackboard import Blackboard
 from bbmuse.engine.control_group import ControlGroup
+from bbmuse.engine.snapshot import snapshot_component
 
 logger = logging.getLogger(__name__)
 
 class Controller:
 
-    def __init__(self, module_handlers, blackboard: Blackboard):
+    def __init__(self, module_handlers, blackboard: Blackboard, failed_representation_names=()):
         self.module_handlers = module_handlers
         self.blackboard = blackboard
+        self.failed_representation_names = list(failed_representation_names)
 
         self.groups = self.make_groups()
         
@@ -28,12 +30,63 @@ class Controller:
             groups.append(ControlGroup(handlers, self.blackboard))
         return groups
 
-    def build(self):
+    def build(self, strict=False):
          # test if dependency graph is is complete
         self.build_execution_order()
+        self.report_deprecated_uses()
+        self.report_cross_group_requires(strict=strict)
+
+    def report_deprecated_uses(self):
+        """
+        USES is superseded by DELAYED. Both read without creating an ordering
+        edge, but USES reads the live representation -- so what it returns
+        depends on the arbitrary tie-breaking of the topological sort and on
+        group membership -- while DELAYED reads a snapshot of the previous
+        cycle, which is the same for everyone and reproducible.
+        """
+        for handler in self.module_handlers:
+            if handler.get_uses():
+                logger.warning(
+                    "%s declares USES %s. USES is deprecated because what it reads is "
+                    "not well defined: move these to DELAYED to read the previous cycle "
+                    "reproducibly, or to REQUIRES to be ordered after the provider.",
+                    handler, ", ".join(handler.get_uses()))
 
         for group in self.groups:
             group.build(self.execution_order)
+
+    def report_cross_group_requires(self, strict=False):
+        """
+        A REQUIRES edge only orders two modules when they run in the same
+        control group. Groups are separate threads, so an edge that crosses a
+        group boundary gives no ordering and no one-to-one pairing at all: the
+        consumer sees whichever value happens to be there, and may see the same
+        one many times or miss most of them. Nothing about the declaration says
+        so, hence this report.
+        """
+        crossing = []
+        for provider, consumers in self.dependencies.items():
+            for consumer in consumers:
+                if provider.get_group() != consumer.get_group():
+                    shared = sorted(set(provider.get_provides()) & set(consumer.get_requires()))
+                    crossing.append((provider, consumer, shared))
+
+        if not crossing:
+            return
+
+        for provider, consumer, shared in crossing:
+            logger.warning(
+                "%s requires %s from %s, but they are in different control groups "
+                "('%s' and '%s'). The dependency is NOT ordered across groups: put both "
+                "modules in one group for lockstep updates, or declare it in DELAYED to "
+                "read the previous cycle deterministically.",
+                consumer, ", ".join(shared), provider,
+                consumer.get_group(), provider.get_group())
+
+        if strict:
+            raise RuntimeError(
+                f"{len(crossing)} REQUIRES dependencies cross a control group boundary "
+                "and are therefore unordered. Listed above; refused in DEBUG mode.")
 
     def build_execution_order(self):
         # construct mapping: repr -> provider
@@ -41,12 +94,23 @@ class Controller:
         for handler in self.module_handlers:
             for repr in handler.get_provides():
                 if not repr in self.blackboard._board.keys():
-                    raise RuntimeError(f"Representation {repr} is unknown to the blackboard, thus cannot be provided by module {handler}.")
+                    if repr in self.failed_representation_names:
+                        raise RuntimeError(f"Representation {repr}, provided by module {handler}, failed to build. See the logged traceback above for the cause.")
+                    raise RuntimeError(f"Representation {repr} is unknown to the blackboard, thus cannot be provided by module {handler}. No definition file for it was found.")
                 if not repr in provides_map.keys():
                     provides_map[repr] = handler
                 else:
                     raise RuntimeError(f"Duplicate provide: Representation {repr} provided by modules {handler} and {provides_map[repr]}.")
         logger.debug("Map repr -> provider: %s", provides_map)
+
+        # DELAYED names must exist; unlike REQUIRES they add no ordering edge,
+        # which is the whole point of declaring them that way
+        for handler in self.module_handlers:
+            for repr in handler.get_delayed():
+                if not repr in self.blackboard._board.keys():
+                    raise RuntimeError(
+                        f"Module {handler} declares {repr} in DELAYED, but no such "
+                        f"representation is on the blackboard.")
 
         # Build the graph: edges from providers -> consumers
         graph = defaultdict(list)
@@ -122,25 +186,107 @@ class Controller:
                 logger.warning("KeyboardInterrupt detected: request halt and join..")
                 self.halt()
         finally:
+            # shut down from here on no matter how the loop was left, so that
+            # modules are always closed and the gc is always turned back on
             for group in self.groups:
                 group.halt()
             logger.debug(f"Requested halt after %.3f secs..", time() - start_time)
 
-        for group in self.groups:
-            group.halt_and_join()
-            logger.debug("Group '%s' accepted join with main thread.", group.name)
+            for group in self.groups:
+                group.halt_and_join()
+                logger.debug("Group '%s' accepted join with main thread.", group.name)
 
-        logger.info("All groups joined with main thread.")
+            logger.info("All groups joined with main thread.")
 
-        logger.info("Call _close() on all modules..")
+            logger.info("Call _close() on all modules..")
+            for mod_handler in self.module_handlers:
+                try:
+                    mod_handler.call_close()
+                except Exception:
+                    logger.exception("Error while closing module %s.", mod_handler)
+
+            # if garbage collector has been disabled
+            if run_mode > 0:
+                gc.enable()
+
+            for mod_handler in self.module_handlers:
+                mod_handler.print_timing_stats()
+
+    def step(self, n_cycles=1, run_mode=0, seed=None):
+        """
+        Run n_cycles of the whole project on this thread, deterministically.
+
+        No control group threads are started: every module is called once per
+        cycle in the single global execution order, so the result does not
+        depend on thread scheduling and two runs of the same project with the
+        same seed produce the same blackboard. RATE declarations are ignored,
+        since there is no wall clock to be late against.
+
+        This is what makes a project testable and a bblearn recording
+        reproducible. Returns the number of cycles actually run.
+        """
+        if seed is not None:
+            self.seed_random_sources(seed)
+
+        logger.info("Call _init() on all modules..")
         for mod_handler in self.module_handlers:
-            mod_handler.call_close()
-        
-        # if garbage collector has been disabled
-        gc.enable()
+            mod_handler.call_init()
 
+        delayed_names = sorted({name
+            for handler in self.module_handlers
+            for name in handler.get_delayed()})
+        views = {handler: self.blackboard.create_view(handler)
+            for handler in self.module_handlers}
+
+        self._running = True
+        cycles_run = 0
+        try:
+            for _ in range(n_cycles):
+                if not self._running:
+                    break
+
+                snapshots = {name: snapshot_component(self.blackboard.get(name).get_component())
+                    for name in delayed_names}
+                for view in views.values():
+                    view._set_delayed_snapshots(snapshots)
+
+                for mod_handler in self.execution_order:
+                    if not mod_handler.is_active():
+                        continue
+                    mod_handler.call_update(views[mod_handler])
+                    if run_mode < 0: # DEBUG mode
+                        for rep_name in mod_handler.get_provides():
+                            self.blackboard.get(rep_name).call_validate()
+                cycles_run += 1
+        finally:
+            logger.info("Call _close() on all modules..")
+            for mod_handler in self.module_handlers:
+                try:
+                    mod_handler.call_close()
+                except Exception:
+                    logger.exception("Error while closing module %s.", mod_handler)
+
+        logger.info("Ran %s deterministic cycles.", cycles_run)
         for mod_handler in self.module_handlers:
             mod_handler.print_timing_stats()
+        return cycles_run
+
+    def seed_random_sources(self, seed):
+        import random
+        random.seed(seed)
+        logger.debug("Seeded random with %s", seed)
+        try:
+            import numpy
+            numpy.random.seed(seed)
+            logger.debug("Seeded numpy.random with %s", seed)
+        except ImportError:
+            pass
+        try:
+            import torch
+            torch.manual_seed(seed)
+            logger.debug("Seeded torch with %s", seed)
+        except ImportError:
+            pass
 
     def halt(self):
         self._running = False

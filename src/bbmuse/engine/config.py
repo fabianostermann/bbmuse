@@ -65,6 +65,7 @@ class Config(dict):
         """ Enhance dict update function to make deep updates """
         Config.deep_update(self, new)
 
+    @staticmethod
     def deep_update(original: dict, new: dict):
         for key, value in new.items():
             if (
