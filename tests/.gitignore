@@ -7,3 +7,7 @@
 
 clones/
 sculpts/
+records/
+
+# bblearn working directory: generated state, not project source
+.bblearn/

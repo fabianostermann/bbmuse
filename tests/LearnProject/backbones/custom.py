@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 class SomeCustomBackbone(nn.Module):
     def __init__(self, in_dim: int, out_dim: int):

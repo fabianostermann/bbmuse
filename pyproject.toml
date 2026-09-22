@@ -27,7 +27,7 @@ bbmuse = "bbmuse.cli:main"
 bblearn = "bbmuse.learn.cli:main"
 
 [project.optional-dependencies]
-plot   = ["networkx", "matplotlib"]
+plot   = ["networkx", "pyvis"]
 learn  = ["torch", "numpy", "tqdm", "pandas"]
 editor = ["nicegui"]
 all    = ["bbmuse[plot,learn,editor]"]

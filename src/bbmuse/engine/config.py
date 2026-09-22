@@ -19,6 +19,14 @@ class Config(dict):
                     "modules": [ "modules/" ],
                     "representations": [ "representations/" ],
                 },
+                "blackboard": {
+                    "levels": [],          # e.g. ["signal", "note", "phrase", "form"]
+                    "focus": "bottom-up",  # or "top-down"
+                },
+                "transport": {
+                    "tempo": 120.0,
+                    "ppq": 960,
+                },
                 "bblearn": {
                     "work": ".bblearn/",
                     "backbones": "backbones/",
@@ -65,6 +73,7 @@ class Config(dict):
         """ Enhance dict update function to make deep updates """
         Config.deep_update(self, new)
 
+    @staticmethod
     def deep_update(original: dict, new: dict):
         for key, value in new.items():
             if (

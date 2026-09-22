@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import importlib.util
 import inspect
+import threading
 
 from bbmuse.engine.base_handler import BaseHandler
 
@@ -13,10 +14,18 @@ class RepresentationHandler(BaseHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.representation_views = []
+        # guards this representation's data against concurrent access from
+        # control groups running in different threads
+        self._data_lock = threading.RLock()
+
+    def get_data_lock(self):
+        return self._data_lock
 
     def build(self):
         rep = self.dynamic_import_from_file(self.get_file_location())
-        self.call_validate()
+        # validate the freshly imported module before publishing it, so that a
+        # representation that fails its own check never reaches the blackboard
+        self._call_validate_on(rep)
         self.set_component(rep) # also sets build_status to True
 
         # overwrite default print
@@ -30,23 +39,56 @@ class RepresentationHandler(BaseHandler):
     def hot_reload(self):
         logger.debug("Hot-reloading %s..", self)
         old_component = self.get_component()
-        try:
-            self.build() 
-        except Exception:
-            logger.exception("Error when building representation %s. Keeping former instance.", self)
-            self._component = old_component
-            
-        for rep_view in self.representation_views:
-            rep_view._rebind(self._component)
-            
-        logger.info("Hot-reload on %s was successful.", self)
+        # swap the component under the data lock, so no module can be reading
+        # or writing this representation while its views are rebound
+        with self._data_lock:
+            try:
+                self.build()
+                reloaded = True
+            except Exception:
+                logger.exception("Error when building representation %s. Keeping former instance.", self)
+                self._component = old_component
+                reloaded = False
+
+            for rep_view in self.representation_views:
+                rep_view._rebind(self._component)
+
+        if reloaded:
+            logger.info("Hot-reload on %s was successful.", self)
 
     #def __str__(self):
     #    return f"<Repr:{self.get_name()}>"
 
+    def get_level(self):
+        """
+        The abstraction level this representation sits at, or None.
+
+        Levels are what make a blackboard hierarchical: raw material at the
+        bottom, structure above it, and knowledge sources working between
+        adjacent levels in both directions.
+        """
+        return getattr(self.get_component(), "LEVEL", None)
+
+    def has_merge(self):
+        """ Whether this representation can arbitrate between several contributors. """
+        return callable(getattr(self.get_component(), "_merge", None))
+
+    def call_merge(self, contributions):
+        """
+        Hand the contributions to the representation so it can decide.
+
+        `contributions` is {module name: that module's scratch copy}, in
+        execution order. _merge() writes the outcome into the representation's
+        own globals, the same way _unpack() does.
+        """
+        self.get_component()._merge(contributions)
+
     def call_validate(self):
-        if callable(getattr(self.get_component(), "_validate", None)):
-            self.get_component()._validate()
+        self._call_validate_on(self.get_component())
+
+    def _call_validate_on(self, component):
+        if callable(getattr(component, "_validate", None)):
+            component._validate()
             
     def create_view(self, read_only=False):
         rep_view = _RepresentationView(self.get_component(), read_only=read_only)

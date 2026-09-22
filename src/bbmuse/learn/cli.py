@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 import argparse
@@ -49,7 +50,7 @@ def process_args():
 
     sub_clone = subparsers.add_parser("clone", help='Train a model to mimic a specific module based on previously collected data.', parents=[common])
     sub_clone.add_argument('module', nargs=1, help="Path or name of a module")
-    sub_clone.add_argument("--backbone", default=None, type=str, help="Path to a backbone py file")
+    sub_clone.add_argument("--backbone", default=None, type=str, help="Name of a backbone py file in the backbones directory (not implemented yet)")
     sub_clone.add_argument("--device", default=None, type=str, help="Torch device to use (e.g. 'cuda' or 'cpu')")
     sub_clone.add_argument('--dry-run',action="store_true", help="Do not write to disk.")
     sub_clone.add_argument("--epochs", type=int, default=20, help="Number of epochs to train.")
@@ -66,6 +67,7 @@ def process_args():
     sub_apply.add_argument('--list', action='store_true', help="List all available models")
     sub_apply.add_argument('--clone', metavar='<id>', type=str, help="Use clone model with specified ID")
     sub_apply.add_argument('--sculpt', metavar='<id>', type=str, help="Use sculpt model with specified ID")
+    sub_apply.add_argument("--device", default=None, type=str, help="Torch device the applied model runs on (default: cpu)")
 
     sub_restore = subparsers.add_parser("restore", help='Restore the original module file from an applied one.', parents=[common])
     sub_restore.add_argument('module', nargs=1, help="Path or name of a module")
@@ -79,8 +81,11 @@ def process_args():
         logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.DEBUG, force=True)
     if args.silent:
         logging.getLogger().setLevel(logging.CRITICAL+1)
-        sys.stdout = None
-        sys.stderr = None
+        # redirect rather than unbind: setting these to None makes any later
+        # print() or progress bar raise AttributeError on a None file object
+        devnull = open(os.devnull, "w")
+        sys.stdout = devnull
+        sys.stderr = devnull
 
     logger.debug("Args: %s", args)
     

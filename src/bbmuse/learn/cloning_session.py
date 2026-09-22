@@ -37,8 +37,14 @@ class CloningSession:
         self.tag = args.tag
         self.dry_run = args.dry_run
 
+        self.warn_about_internal_state()
+
         # load packed representations from recorded episodes
         ep_paths = self.module_manager.get_available_episode_paths(self.module_handler)
+        if not ep_paths:
+            logger.error("No records found for module %s. Run 'bblearn listen' first.",
+                self.module_handler.get_name())
+            sys.exit(1)
         ep_path = ep_paths[-1] # TODO: load all episodes, just loading last episode for now
         self.episode = self.load_episode(ep_path)
 
@@ -47,6 +53,8 @@ class CloningSession:
             f"Requires in module handler and loaded episode does not match, got: {self.module_handler.get_requires()} and {list(self.episode["requires"].keys())}"
         assert self.module_handler.get_uses() == list(self.episode["uses"].keys()),\
             f"Uses in module handler and loaded episode does not match, got: {self.module_handler.get_uses()} and {list(self.episode["uses"].keys())}"
+        assert self.module_handler.get_delayed() == list(self.episode["delayed"].keys()),\
+            f"Delayed in module handler and loaded episode does not match, got: {self.module_handler.get_delayed()} and {list(self.episode["delayed"].keys())}"
         assert self.module_handler.get_provides() == list(self.episode["provides"].keys()),\
             f"Provides in module handler and loaded episode does not match, got: {self.module_handler.get_provides()} and {list(self.episode["provides"].keys())}"
 
@@ -63,26 +71,42 @@ class CloningSession:
         }) == 1, "Inconsistent timestep counts across episode arrays"
 
         # init network that will be used for behavior cloning
-        input_dims_dict = {k: v[1:] for k, v in (shapes["uses"] | shapes["requires"]).items()}
+        input_dims_dict = {k: v[1:] for k, v
+            in (shapes["uses"] | shapes["delayed"] | shapes["requires"]).items()}
         output_dims_dict = {k: v[1:] for k, v in shapes["provides"].items()}
         path_to_backbone = self.get_path_to_backbone(args.backbone)
         self.clone_model = ModuleClone(input_dims_dict, output_dims_dict, path_to_backbone)
+
+    def warn_about_internal_state(self):
+        """
+        A clone maps this cycle's inputs to this cycle's outputs and has no
+        memory. A module that decides anything from values it keeps between
+        updates therefore cannot be reproduced by one, and the training loss
+        will not say so -- it will just plateau.
+        """
+        state_names = self.module_handler.get_internal_state_names()
+        if not state_names:
+            return
+        logger.warning(
+            "Module %s keeps state between updates (%s). A clone sees only the "
+            "blackboard and has no memory, so any behaviour that depends on these "
+            "cannot be learned. Put what matters into a representation the module "
+            "declares, or expect the clone to reproduce only the memoryless part.",
+            self.module_handler.get_name(), ", ".join(state_names))
 
     def load_episode(self, ep_path: str | Path) -> dict[str, dict[str, np.ndarray]]:
         episode = {
             "requires": {},
             "uses": {},
+            "delayed": {},
             "provides": {},
         }
 
         with np.load(ep_path) as data:
             for key in data.files:
-                if key.startswith("requires__"):
-                    episode["requires"][key[len("requires__"):]] = data[key]
-                elif key.startswith("uses__"):
-                    episode["uses"][key[len("uses__"):]] = data[key]
-                elif key.startswith("provides__"):
-                    episode["provides"][key[len("provides__"):]] = data[key]
+                group, _, rep_name = key.partition("__")
+                if group in episode:
+                    episode[group][rep_name] = data[key]
                 else:
                     raise ValueError(f"Unexpected key in episode archive: {key}")
 
@@ -135,7 +159,7 @@ class CloningSession:
         self.clone_model.train()
         optimizer = torch.optim.Adam(self.clone_model.parameters(), lr=lr)
 
-        input_arrays = self.episode["uses"] | self.episode["requires"]
+        input_arrays = self.episode["uses"] | self.episode["delayed"] | self.episode["requires"]
         target_arrays = self.episode["provides"]
 
         inputs = {
@@ -158,7 +182,6 @@ class CloningSession:
             for epoch in pbar:
             
                 epoch_loss = 0.0
-                DEBUG_ONLY_accuracy = []
 
                 if epoch > 0:
 
@@ -174,8 +197,6 @@ class CloningSession:
                         for name, target in batch_targets.items():
                             repr_loss = loss_functions[name](preds[name], target)
 
-                            DEBUG_ONLY_accuracy.append(self._DEBUG_ONLY_accuracy(preds[name], target))
-
                             session_logger.log({f"loss__{name}": repr_loss})
                             loss = loss + repr_loss
 
@@ -184,18 +205,13 @@ class CloningSession:
                         optimizer.step()
                         epoch_loss += loss.item()
 
-                    # >>> DEBUG
-                    DEBUG_ONLY_accuracy = sum(DEBUG_ONLY_accuracy) / len(DEBUG_ONLY_accuracy)
-                    session_logger.log({"accuracy": DEBUG_ONLY_accuracy})
-                    # <<< DEBUG
-
                     epoch_loss /= len(loader)
                     session_logger.log({"epoch": epoch, "loss": epoch_loss, "walltime": time()-start_walltime}).step()
                     pbar.set_description(f"epoch={epoch:04d} loss={epoch_loss:.6f}")
                 
                 # save checkpoints
                 if not self.dry_run:
-                    if checkpoint_interval and epochs % checkpoint_interval == 0:
+                    if checkpoint_interval and epoch % checkpoint_interval == 0:
                         ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
                         ckpt = Checkpoint(ckpt_path)
                         ckpt.save(self.clone_model, epoch, epoch_loss, optimizer)
@@ -207,8 +223,3 @@ class CloningSession:
             pt.save(self.clone_model, epoch, epoch_loss, optimizer)
             session_logger.write_to_disk()
         
-
-    def _DEBUG_ONLY_accuracy(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        #pc_correct  = pred[:, :12].argmax(-1) == target[:, :12].argmax(-1)
-        #oct_correct = pred[:, 12:].argmax(-1) == target[:, 12:].argmax(-1)
-        return 0.0 #(pc_correct & oct_correct).float().mean(

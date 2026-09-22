@@ -17,6 +17,8 @@ class PolicyProber(ModuleListener):
     def __init__(self, policy_model: PolicyModel, mod_handler: ModuleHandler, blackboard: Blackboard, rewards: Reward):
         super().__init__(mod_handler, blackboard)
         self.rewards = rewards
+        # rewards judge the whole system, not just what this module declared
+        self.reward_view = blackboard.create_observer_view()
 
         self.policy_model = policy_model
         self.device = next(policy_model.parameters()).device
@@ -31,7 +33,9 @@ class PolicyProber(ModuleListener):
         # check that unpack() exists for provided representations
         for provided_rep_name in self._mod_handler.get_provides():
             rh = self._blackboard.get(provided_rep_name)
-            assert self._check_function_exists(rh, "_unpack")
+            assert self._check_function_exists(rh, "_unpack"), \
+                f"Representation {provided_rep_name} needs an _unpack() method to be " \
+                f"driven by a policy for module {self._mod_handler.get_name()}."
     
     def _before_hook(self):
         super()._before_hook() # packs and stores requires and provides
@@ -39,7 +43,8 @@ class PolicyProber(ModuleListener):
         # get last requires and uses from buffer
         last_required = {rep_name: torch.as_tensor(rep_array[-1], dtype=torch.float32, device=self.device) for rep_name, rep_array in self._requires_buffer.items()}
         last_used = {rep_name: torch.as_tensor(rep_array[-1], dtype=torch.float32, device=self.device) for rep_name, rep_array in self._uses_buffer.items()}
-        last_inputs = last_required | last_used
+        last_delayed = {rep_name: torch.as_tensor(rep_array[-1], dtype=torch.float32, device=self.device) for rep_name, rep_array in self._delayed_buffer.items()}
+        last_inputs = last_required | last_used | last_delayed
 
         # let policy model predict actions
         with torch.no_grad():
@@ -72,7 +77,7 @@ class PolicyProber(ModuleListener):
         # collect available rewards (self._check_function_exists(rh, "_reward"))
         for reward in self.rewards:
             name = reward.get_name()
-            reward_value = reward.call_reward(self.bb_view)
+            reward_value = reward.call_reward(self.reward_view)
             if name not in self._rewards_buffer:
                 self._rewards_buffer[name] = []
             self._rewards_buffer[name].append(reward_value)
@@ -104,8 +109,15 @@ class PolicyProber(ModuleListener):
             for k, v in self._rewards_buffer.items()
         }
 
-        assert len(set([v.shape[0] for v in rep_arrays.values()])) == 1,\
-            "Episode lengths do not match."
+        if not rep_arrays:
+            raise RuntimeError(
+                "The prober collected nothing during the rollout. The module was "
+                "never updated -- check that its control group is running and that "
+                "the rollout is long enough.")
+
+        episode_lengths = {k: v.shape[0] for k, v in rep_arrays.items()}
+        assert len(set(episode_lengths.values())) == 1,\
+            f"Episode lengths do not match: {episode_lengths}"
         self._actions_buffer.clear()
         self._log_probs_buffer.clear()
         self._rewards_buffer.clear()

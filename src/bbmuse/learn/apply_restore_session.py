@@ -6,6 +6,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from bbmuse.learn.applied import load_applied_table, write_applied_table, applied_table_path
+
 class ApplyRestoreSession:
     def __init__(self, project, module_manager):
         self.project = project
@@ -27,13 +29,18 @@ class ApplyRestoreSession:
 
         logger.info("Ready-to-apply clones: %s", ", ".join(avail_clones_names))
         logger.info("Ready-to-apply sculpts: %s", ", ".join(avail_sculpts_names))
+
+        applied = load_applied_table(self.module_manager).get(self.module_handler.get_name())
+        if applied:
+            logger.info("Currently applied: %s", applied["checkpoint"])
+        else:
+            logger.info("Currently applied: none, the module runs its own _update()")
         logger.info("To apply a specific model, use: bblearn apply <module_name> [--clone|--sculpt] <id>")
 
     def apply(self, args):
         self.init(args)
 
         if not args.list:
-            ckpt_path = None
             models_dir = None
 
             if args.sculpt:
@@ -43,55 +50,75 @@ class ApplyRestoreSession:
             else:
                 # TODO: default to auto-choose lastest model for apply sessions
                 logger.warning("Not yet implement: auto-choose lastest model") # TODO!
-            
+
             if models_dir:
                 model_path = self.module_manager.get_final_model_path(models_dir)
                 if model_path.exists():
-                    ckpt_path = model_path                
-                    self.write_apply(
-                        self.module_handler.get_file_location(),
-                        model_path,
-                    )
+                    self.write_apply(model_path, device=args.device or "cpu")
                     return
                 else:
                     logger.error("Requested model checkpoint not found: %s", model_path)
 
         self.list_available_models()
-    
+
     def restore(self, args):
         self.init(args)
-        self.write_restore(self.module_handler.get_file_location())
+        self.write_restore()
 
-    def write_apply(self, module_path, checkpoint_path, device="cpu"):
+    def write_apply(self, checkpoint_path, device="cpu"):
+        """
+        Record that this module should run a trained model.
+
+        The module's own source file is never touched: the engine reads this
+        table when it builds the project and swaps the implementation in
+        memory, so the hand-written version stays intact and reviewable, and
+        switching back and forth costs nothing.
+        """
+        table = load_applied_table(self.module_manager)
+        name = self.module_handler.get_name()
+
+        work_dir = Path(self.module_manager.get_working_dir()).resolve()
+        try:
+            relative = Path(checkpoint_path).resolve().relative_to(work_dir)
+        except ValueError:
+            relative = Path(checkpoint_path).resolve()
+
+        previous = table.get(name)
+        table[name] = {"checkpoint": str(relative), "device": device}
+        path = write_applied_table(self.module_manager, table)
+
+        if previous:
+            logger.info("Module %s now runs %s (was %s).",
+                name, relative, previous.get("checkpoint"))
+        else:
+            logger.info("Module %s now runs %s.", name, relative)
+        logger.info("Its source file is unchanged. Recorded in: %s", path)
+        logger.info("Undo with: bblearn restore %s", name)
+
+    def write_restore(self):
+        name = self.module_handler.get_name()
+
+        # a module that was modified in place by an older bblearn still carries
+        # its original source in comments, so put that back first
+        module_path = Path(self.module_handler.get_file_location())
         content = self.read_from_module_file(module_path)
-
         if "#bblearn---backup#" in content:
-            logger.error("Writing aborted. bblearn-backup tag already in file: %s", module_path)
+            self.restore_modified_source(module_path, content)
+
+        table = load_applied_table(self.module_manager)
+        if name not in table:
+            logger.info("Module %s does not have an applied model.", name)
             return
 
-        # backup original file content
-        content = '\n'.join(f"#bblearn---backup#{line}" for line in content.splitlines())
-        
-        # add warning how to use the modified file
-        content = USER_WARNING_STUB.replace(
-            "###<bblearn---modle_name>###",
-            self.module_handler.get_name()) \
-            + '\n' + content
-        
-        # add code to make module bbmuse-native
-        content += BBMUSE_NATIVE_MODULE_STUB
-        content = content.replace("###<bblearn---checkpoint_path>###", f"\"{checkpoint_path}\"")
-        content = content.replace("###<bblearn---torch.device>###", f"\"{device}\"")
-        self.write_to_module_file(module_path, content)
+        removed = table.pop(name)
+        write_applied_table(self.module_manager, table)
+        logger.info("Module %s no longer runs %s and is back to its own _update().",
+            name, removed.get("checkpoint"))
 
-    def write_restore(self, module_path):
-        content = self.read_from_module_file(module_path)
-
-        if not "#bblearn---backup#" in content:
-            logger.error("Writing aborted. Did not find any bblearn-backup tag in file: %s", module_path)
-            return
-
-        content = '\n'.join(f"{line.replace("#bblearn---backup#", "")}"
+    def restore_modified_source(self, module_path, content):
+        logger.info("This module was modified in place by an older bblearn. "
+            "Restoring its original source: %s", module_path)
+        content = '\n'.join(line.removeprefix("#bblearn---backup#")
             for line in content.splitlines()
             if line.startswith("#bblearn---backup#"))
         self.write_to_module_file(module_path, content)
@@ -134,86 +161,4 @@ class ApplyRestoreSession:
 
         logger.debug("Wrote module file to disk: %s", file_path)
 
-USER_WARNING_STUB = """####
-#
-#  WARNING:
-#    The content of this file was auto-modified by the BbLearn apply/restore utility.
-#    Do not modify manually, if you do not exactly know what you are doing.
-#
-#    The intended way to restore this file is running:
-#    $ bblearn restore ###<bblearn---modle_name>###
-#
-####
-"""
 
-# TODO: Hard code checkpoint loading to remove any dependency on bbmuse.learn
-BBMUSE_NATIVE_MODULE_STUB = """
-
-from pathlib import Path
-import torch
-from bbmuse.learn.checkpoint import Checkpoint
-
-# --- this module's blackboard contract ---------------------------------------
-USES     = [ "UsedRep" ]
-REQUIRES = [ "ReqRep" ]
-PROVIDES = [ "ProvRep", "UsedRep" ]
-# ------------------------------------------------------------------------------
-
-# --- checkpoint location + inference device ------------------------
-CHECKPOINT_PATH = Path(###<bblearn---checkpoint_path>###)
-DEVICE = torch.device(###<bblearn---torch.device>###)
-# ------------------------------------------------------------------------------
-
-_checkpoint = None
-_model = None
-
-
-def _init():
-    global _checkpoint, _model
-
-    _checkpoint = Checkpoint(CHECKPOINT_PATH, DEVICE).load()
-    _model = _checkpoint.make_model()  # rebuilds ModuleClone, loads weights, moves to DEVICE
-    _model.eval()                      # inference only: disable dropout/BatchNorm updates
-
-    # sanity check: make sure the declared reps actually match this checkpoint
-    expected_inputs = set(USES) | set(REQUIRES)
-    expected_outputs = set(PROVIDES)
-    print(_model.config["input_dims"])
-    actual_inputs = set(_model.config["input_dims"].keys())
-    actual_outputs = set(_model.config["output_dims"].keys())
-    assert expected_inputs == actual_inputs, \
-        f"USES/REQUIRES {expected_inputs} do not match checkpoint inputs {actual_inputs}"
-    assert expected_outputs == actual_outputs, \
-        f"PROVIDES {expected_outputs} do not match checkpoint outputs {actual_outputs}"
-
-    print(
-        "Loaded clone checkpoint from '%s' (trained epoch=%s, loss=%.6f)",
-        CHECKPOINT_PATH, _checkpoint.get_epoch(), _checkpoint.get_loss(),
-    )
-
-
-def _update(bb):
-    with torch.no_grad():
-        # pack current blackboard state into tensors, add a batch dim of 1
-        # since the model was trained on batched [B, *dims] arrays
-        inputs = {
-            name: torch.as_tensor(
-                getattr(bb, name)._pack(), dtype=torch.float32, device=DEVICE
-            ).unsqueeze(0)
-            for name in (USES + REQUIRES)
-        }
-
-        outputs = _model(inputs)
-
-        # unpack predictions back onto the blackboard, dropping the batch dim again
-        for name in PROVIDES:
-            getattr(bb, name)._unpack(outputs[name].squeeze(0))
-
-
-def close():
-    global _checkpoint, _model
-    print("Releasing clone model.")
-    _model = None
-    _checkpoint = None
-
-"""
