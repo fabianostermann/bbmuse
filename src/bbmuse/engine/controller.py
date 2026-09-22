@@ -12,9 +12,10 @@ logger = logging.getLogger(__name__)
 
 class Controller:
 
-    def __init__(self, module_handlers, blackboard: Blackboard):
+    def __init__(self, module_handlers, blackboard: Blackboard, failed_representation_names=()):
         self.module_handlers = module_handlers
         self.blackboard = blackboard
+        self.failed_representation_names = list(failed_representation_names)
 
         self.groups = self.make_groups()
         
@@ -41,7 +42,9 @@ class Controller:
         for handler in self.module_handlers:
             for repr in handler.get_provides():
                 if not repr in self.blackboard._board.keys():
-                    raise RuntimeError(f"Representation {repr} is unknown to the blackboard, thus cannot be provided by module {handler}.")
+                    if repr in self.failed_representation_names:
+                        raise RuntimeError(f"Representation {repr}, provided by module {handler}, failed to build. See the logged traceback above for the cause.")
+                    raise RuntimeError(f"Representation {repr} is unknown to the blackboard, thus cannot be provided by module {handler}. No definition file for it was found.")
                 if not repr in provides_map.keys():
                     provides_map[repr] = handler
                 else:
@@ -122,25 +125,31 @@ class Controller:
                 logger.warning("KeyboardInterrupt detected: request halt and join..")
                 self.halt()
         finally:
+            # shut down from here on no matter how the loop was left, so that
+            # modules are always closed and the gc is always turned back on
             for group in self.groups:
                 group.halt()
             logger.debug(f"Requested halt after %.3f secs..", time() - start_time)
 
-        for group in self.groups:
-            group.halt_and_join()
-            logger.debug("Group '%s' accepted join with main thread.", group.name)
+            for group in self.groups:
+                group.halt_and_join()
+                logger.debug("Group '%s' accepted join with main thread.", group.name)
 
-        logger.info("All groups joined with main thread.")
+            logger.info("All groups joined with main thread.")
 
-        logger.info("Call _close() on all modules..")
-        for mod_handler in self.module_handlers:
-            mod_handler.call_close()
-        
-        # if garbage collector has been disabled
-        gc.enable()
+            logger.info("Call _close() on all modules..")
+            for mod_handler in self.module_handlers:
+                try:
+                    mod_handler.call_close()
+                except Exception:
+                    logger.exception("Error while closing module %s.", mod_handler)
 
-        for mod_handler in self.module_handlers:
-            mod_handler.print_timing_stats()
+            # if garbage collector has been disabled
+            if run_mode > 0:
+                gc.enable()
+
+            for mod_handler in self.module_handlers:
+                mod_handler.print_timing_stats()
 
     def halt(self):
         self._running = False

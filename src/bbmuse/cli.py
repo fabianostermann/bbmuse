@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 import argparse
@@ -54,6 +55,7 @@ def start_editor(args):
         import bbmuse.editor
     except Exception:
         logger.error("GUI is not implemented yet.")
+        sys.exit(1)
 
 def process_args():
     parser = argparse.ArgumentParser(prog="bbmuse", description="BlackBoard MUSic Engine")
@@ -86,8 +88,11 @@ def process_args():
         logging.basicConfig(format="%(levelname)s %(name)s: %(message)s", level=logging.DEBUG, force=True)
     if args.silent:
         logging.getLogger().setLevel(logging.CRITICAL+1)
-        sys.stdout = None
-        sys.stderr = None
+        # redirect rather than unbind: setting these to None makes any later
+        # print() or progress bar raise AttributeError on a None file object
+        devnull = open(os.devnull, "w")
+        sys.stdout = devnull
+        sys.stderr = devnull
 
     logger.debug("Args: %s", args)
 

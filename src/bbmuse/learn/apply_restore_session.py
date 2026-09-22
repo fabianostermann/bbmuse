@@ -33,7 +33,6 @@ class ApplyRestoreSession:
         self.init(args)
 
         if not args.list:
-            ckpt_path = None
             models_dir = None
 
             if args.sculpt:
@@ -47,7 +46,6 @@ class ApplyRestoreSession:
             if models_dir:
                 model_path = self.module_manager.get_final_model_path(models_dir)
                 if model_path.exists():
-                    ckpt_path = model_path                
                     self.write_apply(
                         self.module_handler.get_file_location(),
                         model_path,
@@ -70,11 +68,16 @@ class ApplyRestoreSession:
             return
 
         # backup original file content
-        content = '\n'.join(f"#bblearn---backup#{line}" for line in content.splitlines())
+        backup_lines = content.splitlines()
+        if content.endswith("\n"):
+            # splitlines() drops the final terminator; an extra empty line
+            # records that it was there, so restore can put it back exactly
+            backup_lines.append("")
+        content = '\n'.join(f"#bblearn---backup#{line}" for line in backup_lines)
         
         # add warning how to use the modified file
         content = USER_WARNING_STUB.replace(
-            "###<bblearn---modle_name>###",
+            "###<bblearn---module_name>###",
             self.module_handler.get_name()) \
             + '\n' + content
         
@@ -82,6 +85,15 @@ class ApplyRestoreSession:
         content += BBMUSE_NATIVE_MODULE_STUB
         content = content.replace("###<bblearn---checkpoint_path>###", f"\"{checkpoint_path}\"")
         content = content.replace("###<bblearn---torch.device>###", f"\"{device}\"")
+
+        # carry over the blackboard contract of the module that is being replaced,
+        # so the generated module declares the same dependencies as the original
+        mh = self.module_handler
+        content = content.replace("###<bblearn---group>###", repr(mh.get_group()))
+        content = content.replace("###<bblearn---uses>###", repr(list(mh.get_uses())))
+        content = content.replace("###<bblearn---requires>###", repr(list(mh.get_requires())))
+        content = content.replace("###<bblearn---provides>###", repr(list(mh.get_provides())))
+
         self.write_to_module_file(module_path, content)
 
     def write_restore(self, module_path):
@@ -91,7 +103,7 @@ class ApplyRestoreSession:
             logger.error("Writing aborted. Did not find any bblearn-backup tag in file: %s", module_path)
             return
 
-        content = '\n'.join(f"{line.replace("#bblearn---backup#", "")}"
+        content = '\n'.join(line.removeprefix("#bblearn---backup#")
             for line in content.splitlines()
             if line.startswith("#bblearn---backup#"))
         self.write_to_module_file(module_path, content)
@@ -141,7 +153,7 @@ USER_WARNING_STUB = """####
 #    Do not modify manually, if you do not exactly know what you are doing.
 #
 #    The intended way to restore this file is running:
-#    $ bblearn restore ###<bblearn---modle_name>###
+#    $ bblearn restore ###<bblearn---module_name>###
 #
 ####
 """
@@ -154,9 +166,11 @@ import torch
 from bbmuse.learn.checkpoint import Checkpoint
 
 # --- this module's blackboard contract ---------------------------------------
-USES     = [ "UsedRep" ]
-REQUIRES = [ "ReqRep" ]
-PROVIDES = [ "ProvRep", "UsedRep" ]
+# taken from the original module file at apply time
+GROUP    = ###<bblearn---group>###
+USES     = ###<bblearn---uses>###
+REQUIRES = ###<bblearn---requires>###
+PROVIDES = ###<bblearn---provides>###
 # ------------------------------------------------------------------------------
 
 # --- checkpoint location + inference device ------------------------
@@ -178,7 +192,6 @@ def _init():
     # sanity check: make sure the declared reps actually match this checkpoint
     expected_inputs = set(USES) | set(REQUIRES)
     expected_outputs = set(PROVIDES)
-    print(_model.config["input_dims"])
     actual_inputs = set(_model.config["input_dims"].keys())
     actual_outputs = set(_model.config["output_dims"].keys())
     assert expected_inputs == actual_inputs, \
@@ -187,8 +200,8 @@ def _init():
         f"PROVIDES {expected_outputs} do not match checkpoint outputs {actual_outputs}"
 
     print(
-        "Loaded clone checkpoint from '%s' (trained epoch=%s, loss=%.6f)",
-        CHECKPOINT_PATH, _checkpoint.get_epoch(), _checkpoint.get_loss(),
+        f"Loaded clone checkpoint from '{CHECKPOINT_PATH}' "
+        f"(trained epoch={_checkpoint.get_epoch()}, loss={_checkpoint.get_loss():.6f})"
     )
 
 
@@ -210,7 +223,7 @@ def _update(bb):
             getattr(bb, name)._unpack(outputs[name].squeeze(0))
 
 
-def close():
+def _close():
     global _checkpoint, _model
     print("Releasing clone model.")
     _model = None

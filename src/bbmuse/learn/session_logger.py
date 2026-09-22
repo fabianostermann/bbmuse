@@ -27,13 +27,15 @@ class SessionLogger:
     
     def log(self, record_dict):
         """Add a record to the session history."""
+        record = {}
         for k, v in record_dict.items():
             if isinstance(v, Tensor):
-                record_dict[k] = v.item()
-            if type(v) is float:
-                record_dict[k] = round(v, 5)
+                v = v.item()
+            if isinstance(v, float):
+                v = round(v, 5)
+            record[k] = v
 
-        self.current_step.update(record_dict)
+        self.current_step.update(record)
         return self
 
     def step(self):

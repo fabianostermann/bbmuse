@@ -58,16 +58,18 @@ class Checkpoint:
         Rebuild model as nn.Module from state_dict.
         The model must be of type ModuleClone for this to work.
         """
-        if self._model:
+        if self._model is not None:
             return self._model
 
         assert self._data, "Checkpoint must be saved or loaded first."
-        assert self._data["model_class"] == ModuleClone.__name__
+        assert self._data["model_class"] == ModuleClone.__name__, \
+            f"Expected a {ModuleClone.__name__} checkpoint, got: {self._data['model_class']}"
 
         model = ModuleClone(**self._data["model_config"])
         model.load_state_dict(self._data["model_state_dict"])
         model.to(self.device)
 
+        self._model = model
         return model
 
     def make_optimizer(self):
@@ -75,11 +77,13 @@ class Checkpoint:
         Rebuild Adam optimizer from state_dict.
         For now, only pure Adam is supported.
         """
-        if self._optimizer:
+        if self._optimizer is not None:
             return self._optimizer
 
         assert self._data, "Checkpoint must be saved or loaded first."
 
+        # must bind to the *same* model instance make_model() hands out,
+        # otherwise the optimizer updates a throwaway copy
         optimizer = torch.optim.Adam(self.make_model().parameters())
 
         if "optimizer_state_dict" in self._data.keys():
@@ -89,6 +93,7 @@ class Checkpoint:
         else:
             logger.info("Optimizer state_dict not available from checkpoint '%s'. Returning blank optimizer.", self.path)
 
+        self._optimizer = optimizer
         return optimizer
 
     def get_epoch(self):

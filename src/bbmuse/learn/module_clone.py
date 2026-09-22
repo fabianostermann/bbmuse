@@ -131,11 +131,14 @@ class DefaultBackbone(nn.Module):
 class BackboneWrapper(nn.Module):
 
     def __init__(self, path_to_backbone: str | Path, in_dim: int):
+        super().__init__()
         self.path = Path(path_to_backbone)
         self.name = self.path.stem
 
         self.backbone = None # TODO: dynamic load backbone from file, then instantiate and validate
-        raise NotImplementedError("Not further implemented yet.")
+        raise NotImplementedError(
+            f"Custom backbones are not implemented yet, cannot load: {self.path}. "
+            "Omit --backbone to use the built-in DefaultBackbone.")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.backbone(x)

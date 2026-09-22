@@ -31,7 +31,9 @@ class PolicyProber(ModuleListener):
         # check that unpack() exists for provided representations
         for provided_rep_name in self._mod_handler.get_provides():
             rh = self._blackboard.get(provided_rep_name)
-            assert self._check_function_exists(rh, "_unpack")
+            assert self._check_function_exists(rh, "_unpack"), \
+                f"Representation {provided_rep_name} needs an _unpack() method to be " \
+                f"driven by a policy for module {self._mod_handler.get_name()}."
     
     def _before_hook(self):
         super()._before_hook() # packs and stores requires and provides
@@ -104,8 +106,15 @@ class PolicyProber(ModuleListener):
             for k, v in self._rewards_buffer.items()
         }
 
-        assert len(set([v.shape[0] for v in rep_arrays.values()])) == 1,\
-            "Episode lengths do not match."
+        if not rep_arrays:
+            raise RuntimeError(
+                "The prober collected nothing during the rollout. The module was "
+                "never updated -- check that its control group is running and that "
+                "the rollout is long enough.")
+
+        episode_lengths = {k: v.shape[0] for k, v in rep_arrays.items()}
+        assert len(set(episode_lengths.values())) == 1,\
+            f"Episode lengths do not match: {episode_lengths}"
         self._actions_buffer.clear()
         self._log_probs_buffer.clear()
         self._rewards_buffer.clear()

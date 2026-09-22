@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 
 class Blackboard:
 
-    def __init__(self, representation_handlers=[]):
+    def __init__(self, representation_handlers=None):
         self._board = {}
-        for rep in representation_handlers:
+        for rep in representation_handlers or []:
             self.register(rep)
 
         logger.info("Blackboard initialized: %s", self.list_content())

@@ -39,6 +39,10 @@ class CloningSession:
 
         # load packed representations from recorded episodes
         ep_paths = self.module_manager.get_available_episode_paths(self.module_handler)
+        if not ep_paths:
+            logger.error("No records found for module %s. Run 'bblearn listen' first.",
+                self.module_handler.get_name())
+            sys.exit(1)
         ep_path = ep_paths[-1] # TODO: load all episodes, just loading last episode for now
         self.episode = self.load_episode(ep_path)
 
@@ -158,7 +162,6 @@ class CloningSession:
             for epoch in pbar:
             
                 epoch_loss = 0.0
-                DEBUG_ONLY_accuracy = []
 
                 if epoch > 0:
 
@@ -174,8 +177,6 @@ class CloningSession:
                         for name, target in batch_targets.items():
                             repr_loss = loss_functions[name](preds[name], target)
 
-                            DEBUG_ONLY_accuracy.append(self._DEBUG_ONLY_accuracy(preds[name], target))
-
                             session_logger.log({f"loss__{name}": repr_loss})
                             loss = loss + repr_loss
 
@@ -184,18 +185,13 @@ class CloningSession:
                         optimizer.step()
                         epoch_loss += loss.item()
 
-                    # >>> DEBUG
-                    DEBUG_ONLY_accuracy = sum(DEBUG_ONLY_accuracy) / len(DEBUG_ONLY_accuracy)
-                    session_logger.log({"accuracy": DEBUG_ONLY_accuracy})
-                    # <<< DEBUG
-
                     epoch_loss /= len(loader)
                     session_logger.log({"epoch": epoch, "loss": epoch_loss, "walltime": time()-start_walltime}).step()
                     pbar.set_description(f"epoch={epoch:04d} loss={epoch_loss:.6f}")
                 
                 # save checkpoints
                 if not self.dry_run:
-                    if checkpoint_interval and epochs % checkpoint_interval == 0:
+                    if checkpoint_interval and epoch % checkpoint_interval == 0:
                         ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, epoch)
                         ckpt = Checkpoint(ckpt_path)
                         ckpt.save(self.clone_model, epoch, epoch_loss, optimizer)
@@ -207,8 +203,3 @@ class CloningSession:
             pt.save(self.clone_model, epoch, epoch_loss, optimizer)
             session_logger.write_to_disk()
         
-
-    def _DEBUG_ONLY_accuracy(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        #pc_correct  = pred[:, :12].argmax(-1) == target[:, :12].argmax(-1)
-        #oct_correct = pred[:, 12:].argmax(-1) == target[:, 12:].argmax(-1)
-        return 0.0 #(pc_correct & oct_correct).float().mean(

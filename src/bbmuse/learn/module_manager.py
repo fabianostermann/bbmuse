@@ -1,5 +1,6 @@
 import logging
 import sys, os
+import re
 
 from pathlib import Path
 
@@ -68,8 +69,27 @@ class ModuleManager():
                 armed_indicator.touch()
                 logger.info("Module %s armed.", mod)
 
+    def _next_run_number(self, existing_paths):
+        """
+        Highest leading number found in `existing_paths`, plus one.
+
+        Entries whose name does not start with a number (leftovers, editor
+        droppings, ...) are ignored rather than crashing the caller, and the
+        maximum is taken numerically -- sorted() is lexicographic, so its last
+        entry is "999" once "1000" exists.
+        """
+        numbers = []
+        for path in existing_paths:
+            leading = re.match(r"\d+", path.name)
+            if leading:
+                numbers.append(int(leading.group()))
+            else:
+                logger.debug("Ignoring unnumbered entry: %s", path)
+        return max(numbers) + 1 if numbers else 1
+
     def get_module_dir(self, module_handler):
-        assert not module_handler is None, "Argument should be a valid ModuleHandler object"
+        if module_handler is None:
+            raise ValueError("Argument should be a valid ModuleHandler object, got None.")
         return self._modules_dir / module_handler.get_name().lower()
 
     # TODO later: change function names and variables called "episodes" for listen & clone to "records" 
@@ -79,13 +99,8 @@ class ModuleManager():
         return episodes_dir
 
     def get_next_episode_path(self, module_handler, tag=None):
-        existing = self.get_available_episode_paths(module_handler)
-        if existing:
-            last_number = int(existing[-1].stem.split("_")[0])
-            next_number = last_number + 1
-        else:
-            next_number = 1
-    
+        next_number = self._next_run_number(self.get_available_episode_paths(module_handler))
+
         tag = f"_{tag}" if tag else ""
         return self.get_episodes_dir(module_handler) / f"{next_number:03d}{tag}.npz"
 
@@ -99,13 +114,8 @@ class ModuleManager():
         return clones_dir
 
     def create_next_clone_run_dir(self, module_handler, tag=None):
-        existing = self.get_available_clone_run_dirs(module_handler)
-        if existing:
-            last_number = int(existing[-1].stem.split("_")[0])
-            next_number = last_number + 1
-        else:
-            next_number = 1
-    
+        next_number = self._next_run_number(self.get_available_clone_run_dirs(module_handler))
+
         tag = f"_{tag}" if tag else ""
         next_clone_run_dir = self.get_clones_dir(module_handler) / f"{next_number:03d}{tag}"
         next_clone_run_dir.mkdir(parents=False, exist_ok=False)
@@ -121,13 +131,8 @@ class ModuleManager():
         return sculpts_dir
 
     def create_next_sculpt_run_dir(self, module_handler, tag=None):
-        existing = self.get_available_sculpt_run_dirs(module_handler)
-        if existing:
-            last_number = int(existing[-1].stem.split("_")[0])
-            next_number = last_number + 1
-        else:
-            next_number = 1
-    
+        next_number = self._next_run_number(self.get_available_sculpt_run_dirs(module_handler))
+
         tag = f"_{tag}" if tag else ""
         next_sculpt_run_dir = self.get_sculpts_dir(module_handler) / f"{next_number:03d}{tag}"
         next_sculpt_run_dir.mkdir(parents=False, exist_ok=False)
@@ -237,7 +242,10 @@ class ModuleManager():
         modules_dir = Path(self._modules_dir)
         if not modules_dir.exists():
             return
-        self._remove_empty_dirs(modules_dir)
+        # the modules directory itself is kept even when it ends up empty
+        for subfolder in modules_dir.iterdir():
+            if subfolder.is_dir():
+                self._remove_empty_dirs(subfolder)
 
     def _remove_empty_dirs(self, folder: Path):
         for subfolder in folder.iterdir():

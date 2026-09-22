@@ -22,15 +22,13 @@ class ModuleListener:
 
     def _check_requirements(self):
         # check for required methods
-        for required_rep_name in self._mod_handler.get_requires():
-            rh = self._blackboard.get(required_rep_name)
-            assert self._check_function_exists(rh, "_pack")
-        for used_rep_name in self._mod_handler.get_uses():
-            rh = self._blackboard.get(used_rep_name)
-            assert self._check_function_exists(rh, "_pack")
-        for provided_rep_name in self._mod_handler.get_provides():
-            rh = self._blackboard.get(provided_rep_name)
-            assert self._check_function_exists(rh, "_pack")
+        for rep_name in (self._mod_handler.get_requires()
+                + self._mod_handler.get_uses()
+                + self._mod_handler.get_provides()):
+            rh = self._blackboard.get(rep_name)
+            assert self._check_function_exists(rh, "_pack"), \
+                f"Representation {rep_name} needs a _pack() method to be recorded " \
+                f"for module {self._mod_handler.get_name()}."
     
     def _check_function_exists(self, rep_handler, func_name):
         func = getattr(rep_handler.get_component(), func_name, None)
@@ -127,7 +125,7 @@ class ModuleListener:
         if len(set(timestep_counts.values())) > 1:
             logger.warning(
                 "Inconsistent timestep counts in %s, truncating to %d: %s",
-                self._handler.get_name(), min_timesteps, timestep_counts
+                self._mod_handler.get_name(), min_timesteps, timestep_counts
             )
             rep_arrays = {k: v[:min_timesteps] for k, v in rep_arrays.items()}
 

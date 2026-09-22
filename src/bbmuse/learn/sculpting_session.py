@@ -24,6 +24,9 @@ from bbmuse.learn.policy_model import PolicyModel
 from bbmuse.learn.session_logger import SessionLogger
 from bbmuse.learn.reward import Reward
 
+def _mean(values):
+    return sum(values) / len(values) if values else 0.0
+
 class SculptingSession:
     def __init__(self, project: BbMuseProject, module_manager, device=torch.device("cpu")):
         self.project = project
@@ -42,6 +45,10 @@ class SculptingSession:
 
         # load clone from disk -- TODO: create mode that runs without BC model (init just a random model)
         clone_dirs = self.module_manager.get_available_clone_run_dirs(self.module_handler)
+        if not clone_dirs:
+            logger.error("No clones found for module %s. Run 'bblearn clone' first.",
+                self.module_handler.get_name())
+            sys.exit(1)
         clone_final_path = self.module_manager.get_final_model_path(clone_dirs[-1])
         self.loaded_checkpoint = Checkpoint(clone_final_path, self.device).load()
         clone_model = self.loaded_checkpoint.make_model()
@@ -88,6 +95,7 @@ class SculptingSession:
         bc_coef = 0.01,
         fallback_loss_function = F.mse_loss,
         checkpoint_interval: int = 10,
+        seconds_per_rollout: float = 2,
     ) -> None:
         kwargs = {k: v for k, v in locals().items() if k != 'self'}
 
@@ -104,16 +112,19 @@ class SculptingSession:
         self.policy_model.to(self.device)
         optimizer = torch.optim.Adam(self.policy_model.parameters(), lr=lr)
 
+        # defined up here so a degenerate num_updates=0 still saves a model
+        update = 0
         epoch_loss = 0.0
         with tqdm(range(num_updates+1)) as pbar:
             start_walltime = time()
-            for num_updates in pbar:
+            for update in pbar:
 
-                if num_updates > 0:
+                if update > 0:
                     logger.debug("Start collecting trajectories (exploration phase)..")
 
                     # collect trajectories with current policy
-                    trajectories = self.collect(self.policy_model, self.project, self.prober)
+                    trajectories = self.collect(self.policy_model, self.project, self.prober,
+                        seconds_per_rollout)
                     advantages, named_returns = self.compute_advantages(trajectories)
                     mean_returns = {f"rew_{name}": v.mean().item() for name, v in named_returns.items()}
 
@@ -132,10 +143,13 @@ class SculptingSession:
                     logger.debug("Train policy model (learning phase)..")
 
                     T = next(iter(states.values())).shape[0]
+                    # also covers epochs=0, where the inner loop never runs
+                    n_batches, epoch_policy_loss, epoch_entropy, epoch_bc_loss = 0, [], [], []
                     for epoch in range(epochs):
                         indices = torch.randperm(T, device=self.device)
 
                         epoch_loss = 0.0
+                        n_batches = 0
                         epoch_policy_loss = []
                         epoch_entropy = []
                         epoch_bc_loss = []
@@ -170,20 +184,23 @@ class SculptingSession:
                                     eps = 0.2
                                     clipped = torch.clamp(r, 1 - eps, 1 + eps)
                                     policy_loss = -torch.mean(torch.min(r * A, clipped * A))
-                                epoch_policy_loss.append(policy_loss)
+                                # policy_loss stays a plain 0.0 when there are no advantages
+                                epoch_policy_loss.append(
+                                    policy_loss.item() if torch.is_tensor(policy_loss) else policy_loss)
 
                                 # entropy loss
-                                entropy = torch.mean(entropies[head_name])  # negative because we want to maximize entropy
-                                epoch_entropy.append(entropy)
+                                entropy = torch.mean(entropies[head_name])
+                                epoch_entropy.append(entropy.item())
                                 
                                 # BC loss
                                 bc_pred = pred_actions[head_name]           # what policy did
                                 bc_target = batch_oracle[head_name] # what original module did
                                 bc_loss = loss_functions[head_name](bc_pred, bc_target)
-                                epoch_bc_loss.append(bc_loss)
+                                epoch_bc_loss.append(bc_loss.item())
                                 
                                 loss_contribution = sum([
                                     policy_loss,
+                                    # negated because entropy is to be maximized
                                     entropy_coef * -entropy,
                                     bc_coef * bc_loss,
                                 ]) / len(new_log_probs) # important because decouples task count from hyperparameter tuning
@@ -194,40 +211,45 @@ class SculptingSession:
                             batch_loss.backward()  # one backward through the full shared graph
                             optimizer.step()
 
-                            epoch_loss += batch_loss / len(indices)
+                            # detach: keeping the graph-attached tensor would pin
+                            # every batch's autograd graph for the whole epoch
+                            epoch_loss += batch_loss.item()
+                            n_batches += 1
+
+                    epoch_loss = epoch_loss / n_batches if n_batches else 0.0
 
                     session_logger.log({
-                        "num_updates": num_updates,
+                        "num_updates": update,
                         "weighted_loss": epoch_loss,
-                        "policy_loss": sum(epoch_policy_loss)/len(epoch_policy_loss),
-                        "entropy": sum(epoch_entropy)/len(epoch_entropy),
-                        "bc_loss": sum(epoch_bc_loss)/len(epoch_bc_loss),
+                        "policy_loss": _mean(epoch_policy_loss),
+                        "entropy": _mean(epoch_entropy),
+                        "bc_loss": _mean(epoch_bc_loss),
                         "walltime": time()-start_walltime,
                     }).step()
 
-                    desc = f"num_updates={num_updates:04d} loss={epoch_loss:.6f}"
+                    desc = f"num_updates={update:04d} loss={epoch_loss:.6f}"
                     pbar.set_description(desc)
 
                 # save intermediate policy checkpoints
                 if not self.dry_run:
-                    if checkpoint_interval and num_updates % checkpoint_interval == 0:
-                        ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, num_updates)
+                    if checkpoint_interval and update % checkpoint_interval == 0:
+                        ckpt_path = self.module_manager.get_checkpoint_path(curr_run_dir, update)
                         ckpt = Checkpoint(ckpt_path)
-                        ckpt.save(self.policy_model.model, num_updates, epoch_loss, optimizer)
+                        ckpt.save(self.policy_model.model, update, epoch_loss, optimizer)
                     session_logger.write_to_disk()
 
         # save final policy
         if not self.dry_run:
             final_path = self.module_manager.get_final_model_path(curr_run_dir)
             pt = Checkpoint(final_path)
-            pt.save(self.policy_model.model, num_updates, epoch_loss, optimizer)
+            pt.save(self.policy_model.model, update, epoch_loss, optimizer)
             session_logger.write_to_disk()
         
-    def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber):
+    def collect(self, policy_model, env: BbMuseProject, prober: PolicyProber, seconds_per_rollout: float = 2):
         # run policy -> collect episodes
         policy_model.eval() # deactivate dropout, BatchNorm etc.
         with torch.no_grad():
-            env.run(quit_after=2, run_mode=0)
+            env.run(quit_after=seconds_per_rollout, run_mode=0)
 
         trajectories = prober.flush()
         return trajectories
@@ -246,8 +268,10 @@ class SculptingSession:
 
         # Average across all rewards into a single signal
         stacked_rewards = torch.stack([trajectories[k] for k in reward_keys], dim=0)
-        # Normalize each reward signal over the episode length before combining
-        stacked_rewards = (stacked_rewards - stacked_rewards.mean(dim=1, keepdim=True)) / (stacked_rewards.std(dim=1, keepdim=True) + 1e-8)
+        # Normalize each reward signal over the episode length before combining.
+        # correction=0 (population std): the sample std of a single-step rollout
+        # is NaN, which would poison every gradient that follows.
+        stacked_rewards = (stacked_rewards - stacked_rewards.mean(dim=1, keepdim=True)) / (stacked_rewards.std(dim=1, correction=0, keepdim=True) + 1e-8)
         combined_rewards = stacked_rewards.mean(dim=0)  # shape: (T,)
 
         # Compute discounted returns
@@ -259,6 +283,6 @@ class SculptingSession:
             returns[t] = G
 
         # Normalize
-        returns = (returns - returns.mean()) / (returns.std() + 1e-8) # normalize
+        returns = (returns - returns.mean()) / (returns.std(correction=0) + 1e-8) # normalize
 
         return returns, named_returns
