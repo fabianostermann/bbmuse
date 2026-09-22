@@ -96,65 +96,69 @@ class ModuleManager():
         episodes_dir = self.get_episodes_dir(module_handler)
         return sorted(episodes_dir.glob("*.npz"))
 
+    # ---- generic helpers -------------------------------------------------
+
+    @staticmethod
+    def _run_number(path):
+        """Return the numeric prefix of a run dir, or None if it has none."""
+        head = path.name.split("_", 1)[0]
+        return int(head) if head.isdigit() else None
+
+    @classmethod
+    def _list_run_dirs(cls, parent_dir):
+        """Numbered subdirectories of parent_dir, sorted numerically."""
+        dirs = [
+            p for p in parent_dir.iterdir()
+            if p.is_dir() and cls._run_number(p) is not None
+        ]
+        return sorted(dirs, key=lambda p: (cls._run_number(p), p.name))
+
+    @classmethod
+    def _create_next_run_dir(cls, parent_dir, tag=None):
+        """Create parent_dir/<next number>[_tag] and return it."""
+        existing = cls._list_run_dirs(parent_dir)
+        next_number = cls._run_number(existing[-1]) + 1 if existing else 1
+
+        suffix = f"_{tag}" if tag else ""
+        run_dir = parent_dir / f"{next_number:03d}{suffix}"
+        run_dir.mkdir(parents=False, exist_ok=False)
+        return run_dir
+
+    # ---- clones ----------------------------------------------------------
+
     def get_clones_dir(self, module_handler):
         clones_dir = self.get_module_dir(module_handler) / "clones"
         clones_dir.mkdir(parents=True, exist_ok=True)
         return clones_dir
 
-    def create_next_clone_run_dir(self, module_handler, tag=None):
-        existing = self.get_available_clone_run_dirs(module_handler)
-        if existing:
-            last_number = int(existing[-1].stem.split("_")[0])
-            next_number = last_number + 1
-        else:
-            next_number = 1
-    
-        tag = f"_{tag}" if tag else ""
-        next_clone_run_dir = self.get_clones_dir(module_handler) / f"{next_number:03d}{tag}"
-        next_clone_run_dir.mkdir(parents=False, exist_ok=False)
-        return next_clone_run_dir
-
     def get_available_clone_run_dirs(self, module_handler):
-        clones_dir = self.get_clones_dir(module_handler)
-        return sorted(clones_dir.glob("*"))
+        return self._list_run_dirs(self.get_clones_dir(module_handler))
+
+    def create_next_clone_run_dir(self, module_handler, tag=None):
+        return self._create_next_run_dir(self.get_clones_dir(module_handler), tag)
+
+    # ---- sculpts ---------------------------------------------------------
 
     def get_sculpts_dir(self, module_handler):
         sculpts_dir = self.get_module_dir(module_handler) / "sculpts"
         sculpts_dir.mkdir(parents=True, exist_ok=True)
         return sculpts_dir
 
-    def create_next_sculpt_run_dir(self, module_handler, tag=None):
-        existing = self.get_available_sculpt_run_dirs(module_handler)
-        if existing:
-            last_number = int(existing[-1].stem.split("_")[0])
-            next_number = last_number + 1
-        else:
-            next_number = 1
-    
-        tag = f"_{tag}" if tag else ""
-        next_sculpt_run_dir = self.get_sculpts_dir(module_handler) / f"{next_number:03d}{tag}"
-        next_sculpt_run_dir.mkdir(parents=False, exist_ok=False)
-        return next_sculpt_run_dir
-
     def get_available_sculpt_run_dirs(self, module_handler):
-        sculpts_dir = self.get_sculpts_dir(module_handler)
-        return sorted(sculpts_dir.glob("*"))
+        return self._list_run_dirs(self.get_sculpts_dir(module_handler))
 
-    def create_next_experiments_dir(self, tag=None):
-        existing = self.get_available_experiment_dirs()
-        if existing:
-            last_number = int(existing[-1].stem.split("_")[0])
-            next_number = last_number + 1
-        else:
-            next_number = 1
-    
-        tag = f"_{tag}" if tag else ""
-        next_experiments_dir = self._experiments_dir / f"{next_number:03d}{tag}"
-        next_experiments_dir.mkdir(parents=False, exist_ok=False)
-        return next_experiments_dir
+    def create_next_sculpt_run_dir(self, module_handler, tag=None):
+        return self._create_next_run_dir(self.get_sculpts_dir(module_handler), tag)
+
+    # ---- experiments -----------------------------------------------------
 
     def get_available_experiment_dirs(self):
-        return sorted(self._experiments_dir.glob("*"))
+        return self._list_run_dirs(self._experiments_dir)
+
+    def create_next_experiments_dir(self, tag=None):
+        return self._create_next_run_dir(self._experiments_dir, tag)
+
+    # ---- checkpoints -----------------------------------------------------
 
     def get_checkpoint_path(self, run_dir: str | Path, epoch: int):
         """ Intended for use with clones and sculpt directories """
